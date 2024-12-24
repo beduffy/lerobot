@@ -304,6 +304,9 @@ def train(cfg: DictConfig, out_dir: str | None = None, job_name: str | None = No
     set_global_seed(cfg.seed)
 
     # Check device is available
+
+    # cfg.device = "cpu"
+    # TODO: KeyError: 'observation.images.top'
     device = get_safe_torch_device(cfg.device, log=True)
 
     torch.backends.cudnn.benchmark = True
