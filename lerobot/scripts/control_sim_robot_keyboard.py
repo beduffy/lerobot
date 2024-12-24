@@ -153,9 +153,18 @@ def teleoperate(env, robot: Robot, process_action_fn, teleop_time_s=None):
     env.reset()
     start_teleop_t = time.perf_counter()
     while True:
-        leader_pos = robot.leader_arms.main.read("Present_Position")
-        action = process_action_fn(leader_pos)
-        env.step(np.expand_dims(action, 0))
+        # leader_pos = robot.leader_arms.main.read("Present_Position")
+        # action = process_action_fn(leader_pos)
+        # action = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).squeeze()
+        # print(action.shape)
+        # env.step(np.expand_dims(action, 0))
+        
+        # Create a zero action vector with correct shape
+        action = np.zeros(env.action_space.shape[0])  # This will create a 1D array of correct size
+        # print(f"Action shape: {action.shape}")
+        
+        # Step the environment with the action
+        env.step(action)
         if teleop_time_s is not None and time.perf_counter() - start_teleop_t > teleop_time_s:
             print("Teleoperation processes finished.")
             break
@@ -193,8 +202,8 @@ def record(
             fps = policy_fps
             logging.warning(f"No fps provided, so using the fps from policy config ({policy_fps}).")
 
-    if policy is None and process_action_from_leader is None:
-        raise ValueError("Either policy or process_action_fn has to be set to enable control in sim.")
+    # if policy is None and process_action_from_leader is None:
+    #     raise ValueError("Either policy or process_action_fn has to be set to enable control in sim.")
 
     # initialize listener before sim env
     listener, events = init_keyboard_listener()
@@ -229,6 +238,8 @@ def record(
                 key = "observation.image." + key
             features[key] = {"dtype": "video", "names": ["channel", "height", "width"], "shape": shape}
 
+        print("Available observation keys:", env.observation_space.spaces.keys())
+        # import pdb;pdb.set_trace()
         for key, obs_key in state_keys_dict.items():
             features[key] = {
                 "dtype": "float32",
@@ -272,12 +283,17 @@ def record(
             if policy is not None:
                 action = predict_action(observation, policy, device, use_amp)
             else:
-                leader_pos = robot.leader_arms.main.read("Present_Position")
-                action = process_action_from_leader(leader_pos)
+                # leader_pos = robot.leader_arms.main.read("Present_Position")
+                # action = process_action_from_leader(leader_pos)
+                action = np.zeros(env.action_space.shape[0])
 
             observation, reward, terminated, _, info = env.step(action)
 
             success = info.get("is_success", False)
+            # import pdb;pdb.set_trace()
+            # print(info)
+            # print(info.get("timestamp"))
+            # print(info.get("timestamp"))
             env_timestamp = info.get("timestamp", dataset.episode_buffer["size"] / fps)
 
             frame = {
@@ -517,14 +533,15 @@ if __name__ == "__main__":
         robot_overrides = ["~cameras", "~follower_arms"]
         robot_cfg = init_hydra_config(robot_path, robot_overrides)
         robot = make_robot(robot_cfg)
-        robot.connect()
+        # import pdb;pdb.set_trace()
+        # robot.connect()
 
-        calib_kwgs = init_sim_calibration(robot, env_cfg.calibration)
+        # calib_kwgs = init_sim_calibration(robot, env_cfg.calibration)
 
-        def process_leader_actions_fn(action):
-            return real_positions_to_sim(action, **calib_kwgs)
+        # def process_leader_actions_fn(action):
+        #     return real_positions_to_sim(action, **calib_kwgs)
 
-        robot.leader_arms.main.calibration = None
+        # robot.leader_arms.main.calibration = None
 
     if control_mode == "teleoperate":
         teleoperate(env_constructor, robot, process_leader_actions_fn)
@@ -540,7 +557,7 @@ if __name__ == "__main__":
             f"Invalid control mode: '{control_mode}', only valid modes are teleoperate, record and replay."
         )
 
-    if robot and robot.is_connected:
-        # Disconnect manually to avoid a "Core dump" during process
-        # termination due to camera threads not properly exiting.
-        robot.disconnect()
+    # if robot and robot.is_connected:
+    #     # Disconnect manually to avoid a "Core dump" during process
+    #     # termination due to camera threads not properly exiting.
+    #     robot.disconnect()
