@@ -1,0 +1,58 @@
+python lerobot/scripts/train.py \
+  hydra.job.name=act_aloha_sim_transfer_cube_human \
+  hydra.run.dir=outputs/train/act_aloha_sim_transfer_cube_human \
+  policy=act \
+  policy.use_vae=true \
+  env=aloha \
+  env.task=AlohaTransferCube-v0 \
+  dataset_repo_id=lerobot/aloha_sim_transfer_cube_human \
+  training.eval_freq=10000 \
+  training.log_freq=250 \
+  training.offline_steps=100000 \
+  training.save_model=true \
+  training.save_freq=2000 \
+  eval.n_episodes=50 \
+  eval.batch_size=50 \
+  wandb.enable=true \
+  device=cuda
+
+
+# above has issue with save save_model
+
+
+python lerobot/scripts/train.py \
+  hydra.job.name=act_aloha_sim_transfer_cube_human \
+  hydra.run.dir=outputs/train/act_aloha_sim_transfer_cube_human \
+  policy=act \
+  policy.use_vae=true \
+  env=aloha \
+  env.task=AlohaTransferCube-v0 \
+  dataset_repo_id=lerobot/aloha_sim_transfer_cube_human \
+  training.eval_freq=10000 \
+  training.log_freq=250 \
+  training.offline_steps=100000 \
+  training.save_freq=2000 \
+  eval.n_episodes=50 \
+  eval.batch_size=50 \
+  wandb.enable=true \
+  device=cuda
+
+# above failed on eval due to opengl error
+
+
+MUJOCO_GL=egl python lerobot/scripts/train.py \
+  hydra.job.name=act_aloha_sim_transfer_cube_human \
+  hydra.run.dir=outputs/train/act_aloha_sim_transfer_cube_human \
+  policy=act \
+  policy.use_vae=true \
+  env=aloha \
+  env.task=AlohaTransferCube-v0 \
+  dataset_repo_id=lerobot/aloha_sim_transfer_cube_human \
+  training.eval_freq=1000 \
+  training.log_freq=250 \
+  training.offline_steps=100000 \
+  training.save_freq=2000 \
+  eval.n_episodes=50 \
+  eval.batch_size=50 \
+  wandb.enable=true \
+  device=cuda
