@@ -15,11 +15,13 @@ from huggingface_hub import snapshot_download
 from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
 
 # Create a directory to store the video of the evaluation
-output_directory = Path("outputs/eval/example_pusht_diffusion")
+# output_directory = Path("outputs/eval/example_pusht_diffusion")
+output_directory = Path("outputs/eval/AlohaTransferCube-v0")
 output_directory.mkdir(parents=True, exist_ok=True)
 
 # Download the diffusion policy for pusht environment
-pretrained_policy_path = Path(snapshot_download("lerobot/diffusion_pusht"))
+# pretrained_policy_path = Path(snapshot_download("lerobot/diffusion_pusht"))
+pretrained_policy_path = Path(snapshot_download("lerobot/act_aloha_sim_transfer_cube_human"))
 # OR uncomment the following to evaluate a policy from the local outputs/train folder.
 # pretrained_policy_path = Path("outputs/train/example_pusht_diffusion")
 
@@ -42,7 +44,9 @@ policy.to(device)
 # an image of the scene and state/position of the agent. The environment
 # also automatically stops running after 300 interactions/steps.
 env = gym.make(
-    "gym_pusht/PushT-v0",
+    # "gym_pusht/PushT-v0",
+    # "gym_aloha/AlohaInsertion-v0",
+    "gym_aloha/AlohaTransferCube-v0",
     obs_type="pixels_agent_pos",
     max_episode_steps=300,
 )

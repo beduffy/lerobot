@@ -212,6 +212,7 @@ def record(
     env = env()
 
     # Create empty dataset or load existing saved episodes
+    import pdb;pdb.set_trace()
     num_cameras = sum([1 if "image" in key else 0 for key in env.observation_space])
 
     # get image keys
@@ -277,6 +278,8 @@ def record(
         seed = np.random.randint(0, 1e5)
         observation, info = env.reset(seed=seed)
 
+        action_change = 0
+
         while timestamp < episode_time_s:
             start_loop_t = time.perf_counter()
 
@@ -286,6 +289,8 @@ def record(
                 # leader_pos = robot.leader_arms.main.read("Present_Position")
                 # action = process_action_from_leader(leader_pos)
                 action = np.zeros(env.action_space.shape[0])
+                action[0] = action_change  # Add increasing value to first dimension
+                action_change += 0.01  # Increment by 0.01 each timestep
 
             observation, reward, terminated, _, info = env.step(action)
 
@@ -351,6 +356,8 @@ def record(
     log_say("Stop recording", play_sounds, blocking=True)
     stop_recording(robot, listener, display_cameras)
 
+    # TODO display_cameras
+
     if run_compute_stats:
         logging.info("Computing dataset statistics")
     dataset.consolidate(run_compute_stats)
@@ -367,7 +374,11 @@ def replay(
 ):
     env = env()
 
+    print('root', root)
+    print('repo_id', repo_id)
     local_dir = Path(root) / repo_id
+    print('local_dir', local_dir)
+    # local_dir = Path('/home/ben/.cache/huggingface/lerobot/ben/ben_keyboard_aloha_control')
     if not local_dir.exists():
         raise ValueError(local_dir)
 
