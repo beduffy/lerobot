@@ -56,3 +56,24 @@ MUJOCO_GL=egl python lerobot/scripts/train.py \
   eval.batch_size=50 \
   wandb.enable=true \
   device=cuda
+
+python lerobot/scripts/control_sim_robot_keyboard.py teleoperate --robot-path lerobot/configs/robot/aloha.yaml --sim-config lerobot/configs/env/aloha.yaml
+
+
+python lerobot/scripts/control_sim_robot_keyboard.py record --robot-path lerobot/configs/robot/aloha.yaml --sim-config lerobot/configs/env/aloha.yaml --num-episodes 1 --task AlohaInsertion-v0 --repo-id $USER/ben_keyboard_aloha_control --fps 30  --display-cameras 1
+
+
+
+python lerobot/scripts/control_sim_robot_keyboard.py replay --robot-path lerobot/configs/robot/aloha.yaml --sim-config lerobot/configs/env/aloha.yaml --repo-id $USER/ben_keyboard_aloha_control --root /home/ben/.cache/huggingface/lerobot/ --episode 0 --fps 30
+INFO 2024-12-24 21:43:34 /__init__.py:88 MUJOCO_GL is not set, so an OpenGL backend will be chosen automatically.
+INFO 2024-12-24 21:43:34 /__init__.py:96 Successfully imported OpenGL backend: %s
+INFO 2024-12-24 21:43:34 /__init__.py:31 MuJoCo library version is: %s
+root /home/ben/.cache/huggingface/lerobot
+repo_id ben/ben_keyboard_aloha_control
+local_dir /home/ben/.cache/huggingface/lerobot/ben/ben_keyboard_aloha_control
+Returning existing local_dir `/home/ben/.cache/huggingface/lerobot` as remote repo cannot be accessed in `snapshot_download` (None).
+
+
+
+# below worked! 
+python lerobot/scripts/visualize_dataset.py  --repo-id $USER/ben_keyboard_aloha_control --episode-index 0 --local-files-only 1

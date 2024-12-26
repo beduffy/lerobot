@@ -16,3 +16,4 @@ env:
 
 state_keys:
   "observation.agent_state": "agent_pos"
+  "observation.image.agent_image": "agent_image"
