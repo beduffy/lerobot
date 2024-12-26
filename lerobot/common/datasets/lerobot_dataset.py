@@ -720,10 +720,12 @@ class LeRobotDataset(torch.utils.data.Dataset):
             if key not in self.features:
                 raise ValueError(key)
 
-            if self.features[key]["dtype"] not in ["image", "video"]:
+            # if self.features[key]["dtype"] not in ["image", "video"]:
+            if self.features[key]["dtype"] not in ["image", "video", "pixels"]:
                 item = frame[key].numpy() if isinstance(frame[key], torch.Tensor) else frame[key]
                 self.episode_buffer[key].append(item)
-            elif self.features[key]["dtype"] in ["image", "video"]:
+            # elif self.features[key]["dtype"] in ["image", "video"]:
+            elif self.features[key]["dtype"] in ["image", "video", "pixels"]:
                 img_path = self._get_image_file_path(
                     episode_index=self.episode_buffer["episode_index"], image_key=key, frame_index=frame_index
                 )
@@ -731,6 +733,10 @@ class LeRobotDataset(torch.utils.data.Dataset):
                     img_path.parent.mkdir(parents=True, exist_ok=True)
                 self._save_image(frame[key], img_path)
                 self.episode_buffer[key].append(str(img_path))
+                print('saved image path: ', img_path)
+                # print('frame: ', frame)
+                print('frame.keys(): ', frame.keys())
+                # print('frame[key]: ', frame[key])
 
         self.episode_buffer["size"] += 1
 
@@ -767,6 +773,25 @@ class LeRobotDataset(torch.utils.data.Dataset):
             raise ValueError()
 
         for key, ft in self.features.items():
+            # import pdb; pdb.set_trace()
+            print('key', key)
+            print('ft', ft)
+            print('ft["dtype"]', ft["dtype"])
+            print('ft["shape"]', ft["shape"])
+            if key == 'observation.image.pixels':
+                print('key is pixels')
+                # print('episode_buffer', episode_buffer)
+                print('len(episode_buffer)', len(episode_buffer))
+                print('episode_buffer.keys()', episode_buffer.keys())
+                print('dtype episode_buffer', type(episode_buffer))
+                print('dtype episode_buffer[key]', type(episode_buffer[key]))
+                print('len(episode_buffer[key])', len(episode_buffer[key]))
+                print('episode_buffer[key][0]', episode_buffer[key][0])
+                print('episode_buffer[key][0].shape', episode_buffer[key][0].shape)
+
+                ft['shape'] = episode_buffer[key][0].shape  # TODO hack
+                ft["dtype"] = 'image'
+                # print('episode_buffer[key]', episode_buffer[key])
             if key == "index":
                 episode_buffer[key] = np.arange(
                     self.meta.total_frames, self.meta.total_frames + episode_length
@@ -775,9 +800,12 @@ class LeRobotDataset(torch.utils.data.Dataset):
                 episode_buffer[key] = np.full((episode_length,), episode_index)
             elif key == "task_index":
                 episode_buffer[key] = np.full((episode_length,), task_index)
-            elif ft["dtype"] in ["image", "video"]:
+            # elif ft["dtype"] in ["image", "video"]:
+            elif ft["dtype"] in ["image", "video", "pixels"]:
                 continue
             elif len(ft["shape"]) == 1 and ft["shape"][0] == 1:
+                # TODO this is saying if only 1 image, then set image, whereas below is stack?
+                # or nothing to do with images?
                 episode_buffer[key] = np.array(episode_buffer[key], dtype=ft["dtype"])
             elif len(ft["shape"]) == 1 and ft["shape"][0] > 1:
                 episode_buffer[key] = np.stack(episode_buffer[key])

@@ -79,17 +79,9 @@ import gymnasium as gym
 import numpy as np
 import torch
 
-# print('before imshow before importing lerobotdataset')
-# cv2.imshow('hey', np.zeros((100, 100)))
-# cv2.waitKey(1)
-# print('after imshow before importing lerobotdataset')
 cv2.namedWindow('pixels', cv2.WINDOW_NORMAL)
 
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
-# print('before imshow before importing init_keyboard_listener')
-# cv2.imshow('hey', np.zeros((100, 100)))
-# cv2.waitKey(0)
-# print('after imshow')
 from lerobot.common.robot_devices.control_utils import (
     init_keyboard_listener,
     init_policy,
@@ -100,10 +92,6 @@ from lerobot.common.robot_devices.control_utils import (
     sanity_check_dataset_robot_compatibility,
     stop_recording,
 )
-# print('before imshow after importing init_keyboard_listener')
-# cv2.imshow('hey', np.zeros((100, 100)))
-# cv2.waitKey(0)
-# print('after imshow')
 from lerobot.common.robot_devices.robots.factory import make_robot
 from lerobot.common.robot_devices.robots.utils import Robot
 from lerobot.common.robot_devices.utils import busy_wait
@@ -221,16 +209,6 @@ def record(
     # if policy is None and process_action_from_leader is None:
     #     raise ValueError("Either policy or process_action_fn has to be set to enable control in sim.")
 
-    # import os
-    # print("DISPLAY environment:", os.environ.get('DISPLAY'))
-    # os.environ['QT_X11_NO_MITSHM'] = '1'
-    # print("DISPLAY environment:", os.environ.get('DISPLAY'))
-    # headless = is_headless()
-    # print('headless', headless)
-    # print('before named window')
-    # cv2.namedWindow('test', cv2.WINDOW_NORMAL)
-    # print('after named window')
-
     # initialize listener before sim env
     listener, events = init_keyboard_listener()
 
@@ -238,7 +216,6 @@ def record(
     env = env()
 
     # Create empty dataset or load existing saved episodes
-    # import pdb;pdb.set_trace()
     # TODO wtf aloha insertion is pixels. where can i find good aloha.yaml
     # num_cameras = sum([1 if "image" in key else 0 for key in env.observation_space])
 
@@ -264,7 +241,8 @@ def record(
         features = DEFAULT_FEATURES
         # add image keys to features
         for key in image_keys:
-            shape = env.observation_space[key].shape
+            # shape = env.observation_space[key].shape
+            shape = env.observation_space[key]['top'].shape
             if not key.startswith("observation.image."):
                 key = "observation.image." + key
             features[key] = {"dtype": "video", "names": ["channel", "height", "width"], "shape": shape}
@@ -294,7 +272,7 @@ def record(
 
     recorded_episodes = 0
     while True:
-        log_say(f"Recording episode {dataset.num_episodes}", play_sounds)
+        # log_say(f"Recording episode {dataset.num_episodes}", play_sounds)
 
         if events is None:
             events = {"exit_early": False}
