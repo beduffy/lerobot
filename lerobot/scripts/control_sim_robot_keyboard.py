@@ -79,7 +79,17 @@ import gymnasium as gym
 import numpy as np
 import torch
 
+# print('before imshow before importing lerobotdataset')
+# cv2.imshow('hey', np.zeros((100, 100)))
+# cv2.waitKey(1)
+# print('after imshow before importing lerobotdataset')
+cv2.namedWindow('pixels', cv2.WINDOW_NORMAL)
+
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+# print('before imshow before importing init_keyboard_listener')
+# cv2.imshow('hey', np.zeros((100, 100)))
+# cv2.waitKey(0)
+# print('after imshow')
 from lerobot.common.robot_devices.control_utils import (
     init_keyboard_listener,
     init_policy,
@@ -90,10 +100,16 @@ from lerobot.common.robot_devices.control_utils import (
     sanity_check_dataset_robot_compatibility,
     stop_recording,
 )
+# print('before imshow after importing init_keyboard_listener')
+# cv2.imshow('hey', np.zeros((100, 100)))
+# cv2.waitKey(0)
+# print('after imshow')
 from lerobot.common.robot_devices.robots.factory import make_robot
 from lerobot.common.robot_devices.robots.utils import Robot
 from lerobot.common.robot_devices.utils import busy_wait
 from lerobot.common.utils.utils import init_hydra_config, init_logging, log_say
+
+
 
 DEFAULT_FEATURES = {
     "next.reward": {
@@ -205,6 +221,16 @@ def record(
     # if policy is None and process_action_from_leader is None:
     #     raise ValueError("Either policy or process_action_fn has to be set to enable control in sim.")
 
+    # import os
+    # print("DISPLAY environment:", os.environ.get('DISPLAY'))
+    # os.environ['QT_X11_NO_MITSHM'] = '1'
+    # print("DISPLAY environment:", os.environ.get('DISPLAY'))
+    # headless = is_headless()
+    # print('headless', headless)
+    # print('before named window')
+    # cv2.namedWindow('test', cv2.WINDOW_NORMAL)
+    # print('after named window')
+
     # initialize listener before sim env
     listener, events = init_keyboard_listener()
 
@@ -212,12 +238,16 @@ def record(
     env = env()
 
     # Create empty dataset or load existing saved episodes
-    import pdb;pdb.set_trace()
-    num_cameras = sum([1 if "image" in key else 0 for key in env.observation_space])
+    # import pdb;pdb.set_trace()
+    # TODO wtf aloha insertion is pixels. where can i find good aloha.yaml
+    # num_cameras = sum([1 if "image" in key else 0 for key in env.observation_space])
+
+    num_cameras = sum([1 if "pixels" in key else 0 for key in env.observation_space])
 
     # get image keys
-    image_keys = [key for key in env.observation_space if "image" in key]
-    state_keys_dict = env_cfg.state_keys
+    # image_keys = [key for key in env.observation_space if "image" in key]
+    image_keys = [key for key in env.observation_space if "pixels" in key]
+    state_keys_dict = env_cfg.state_keys  # TODO why is this different?
 
     if resume:
         dataset = LeRobotDataset(
@@ -316,15 +346,35 @@ def record(
                     frame[key] = observation[key]
 
             for key, obs_key in state_keys_dict.items():
-                frame[key] = torch.from_numpy(observation[obs_key])
+                # TypeError: expected np.ndarray (got dict)
+                # import pdb;pdb.set_trace()
+                if type(observation[obs_key]) == dict:
+                    frame[key] = torch.from_numpy(observation[obs_key]["top"])
+                else:
+                    frame[key] = torch.from_numpy(observation[obs_key])
 
+            # import pdb;pdb.set_trace()
             dataset.add_frame(frame)
 
             if display_cameras and not is_headless():
                 for key in image_keys:
-                    cv2.imshow(key, cv2.cvtColor(observation[key], cv2.COLOR_RGB2BGR))
+                    # Handle both dictionary and direct array cases
+                    img = observation[key]['top'] if isinstance(observation[key], dict) else observation[key]
+                    # print('before named window')
+                    # cv2.namedWindow(key, cv2.WINDOW_NORMAL)
+                    # print('after named window')
+                    # print('img')
+                    # print(img)
+                    # print(img.shape)
+                    # print('running imshow')
+                    
+                    # cv2.imshow(key, cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+                    cv2.imshow(key, img)
+                    # print('done imshow')
+                # Add a small wait time to process window events
                 cv2.waitKey(1)
 
+            # import pdb;pdb.set_trace()
             if fps is not None:
                 dt_s = time.perf_counter() - start_loop_t
                 busy_wait(1 / fps - dt_s)
@@ -534,6 +584,7 @@ if __name__ == "__main__":
     importlib.import_module(f"gym_{env_cfg.env.name}")
 
     def env_constructor():
+        # import pdb;pdb.set_trace()
         return gym.make(env_cfg.env.handle, disable_env_checker=True, **env_cfg.env.gym)
 
     robot = None
@@ -558,6 +609,11 @@ if __name__ == "__main__":
         teleoperate(env_constructor, robot, process_leader_actions_fn)
 
     elif control_mode == "record":
+        # import cv2
+        # import numpy as np
+        # print('before imshow')
+        # cv2.imshow('hey', np.zeros((100, 100)))
+        # print('after imshow')
         record(env_constructor, robot, process_leader_actions_fn, **kwargs)
 
     elif control_mode == "replay":
