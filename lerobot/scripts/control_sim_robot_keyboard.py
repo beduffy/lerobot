@@ -381,8 +381,8 @@ def record(
             logging.info("Waiting for a few seconds before starting next episode recording...")
             busy_wait(3)
 
-    log_say("Stop recording", play_sounds, blocking=True)
-    stop_recording(robot, listener, display_cameras)
+    # log_say("Stop recording", play_sounds, blocking=True)
+    # stop_recording(robot, listener, display_cameras)
 
     # TODO display_cameras
 
@@ -393,7 +393,7 @@ def record(
     if push_to_hub:
         dataset.push_to_hub(tags=tags)
 
-    log_say("Exiting", play_sounds)
+    # log_say("Exiting", play_sounds)
     return dataset
 
 
@@ -485,7 +485,7 @@ if __name__ == "__main__":
     parser_record.add_argument(
         "--push-to-hub",
         type=int,
-        default=1,
+        default=0,
         help="Upload dataset to Hugging Face hub.",
     )
     parser_record.add_argument(

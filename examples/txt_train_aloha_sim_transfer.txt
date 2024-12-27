@@ -61,7 +61,48 @@ python lerobot/scripts/control_sim_robot_keyboard.py teleoperate --robot-path le
 
 
 python lerobot/scripts/control_sim_robot_keyboard.py record --robot-path lerobot/configs/robot/aloha.yaml --sim-config lerobot/configs/env/aloha.yaml --num-episodes 1 --task AlohaInsertion-v0 --repo-id $USER/ben_keyboard_aloha_control --fps 30  --display-cameras 1
+python lerobot/scripts/control_sim_robot_keyboard.py record --robot-path lerobot/configs/robot/aloha.yaml --sim-config lerobot/configs/env/aloha.yaml --num-episodes 1 --task AlohaInsertion-v0 --repo-id $USER/ben_keyboard_aloha_control --fps 30  --display-cameras 1 --episode-time-s 5 --num-image-writer-processes 1
 
+
+# training on above dataset
+MUJOCO_GL=egl python lerobot/scripts/train.py \
+  hydra.job.name=action_change_insertion_ben_hack \
+  hydra.run.dir=outputs/train/action_change_insertion_ben_hack \
+  policy=act \
+  policy.use_vae=true \
+  env=aloha \
+  env.task=AlohaInsertion-v0 \
+  dataset_repo_id=ben/ben_keyboard_aloha_control \
+  training.eval_freq=1000 \
+  training.log_freq=250 \
+  training.offline_steps=100000 \
+  training.save_freq=2000 \
+  eval.n_episodes=50 \
+  eval.batch_size=50 \
+  wandb.enable=true \
+  device=cpu
+
+
+# below got me a bit further
+MUJOCO_GL=egl python lerobot/scripts/train.py \
+  hydra.job.name=action_change_insertion_ben_hack \
+  hydra.run.dir=outputs/train/action_change_insertion_ben_hack \
+  policy=act \
+  policy.use_vae=true \
+  env=aloha \
+  env.task=AlohaInsertion-v0 \
+  dataset_repo_id=ben/ben_keyboard_aloha_control \
+  training.eval_freq=1000 \
+  training.log_freq=250 \
+  training.offline_steps=100000 \
+  training.save_freq=2000 \
+  eval.n_episodes=50 \
+  eval.batch_size=50 \
+  wandb.enable=true \
+  device=cpu \
+  fps=30 \
+  policy.chunk_size=30 \
+  policy.n_action_steps=3
 
 
 python lerobot/scripts/control_sim_robot_keyboard.py replay --robot-path lerobot/configs/robot/aloha.yaml --sim-config lerobot/configs/env/aloha.yaml --repo-id $USER/ben_keyboard_aloha_control --root /home/ben/.cache/huggingface/lerobot/ --episode 0 --fps 30
