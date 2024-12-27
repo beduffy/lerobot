@@ -86,7 +86,19 @@ if 'observation.agent_state' in stats:
 # Policies are initialized with a configuration class, in this case `DiffusionConfig`.
 # For this example, no arguments need to be passed because the defaults are set up for PushT.
 # If you're doing something different, you will likely need to change at least some of the defaults.
-cfg = DiffusionConfig()
+cfg = DiffusionConfig(
+    # Modify the configuration to match your input/output dimensions
+    input_shapes={
+        "observation.image": [3, 96, 96],  # Standard image dimensions
+        "observation.state": [14],  # Your state dimension is 14
+    },
+    output_shapes={
+        "action": [14],  # Your action dimension is 14
+    },
+    n_action_steps=16,  # Match the number of future actions in delta_timestamps
+    horizon=16  # Should match n_action_steps
+)
+
 # TODO problem is 'top'...... in train.py feckin hell.
 # 
 # and here:
