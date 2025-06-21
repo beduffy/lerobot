@@ -499,7 +499,8 @@ python -m lerobot.record \
 # TODO clear space on lightning and wandb, 
 # TODO maybe don't save models to wandb?
 # TODO understand when voice says episode over, it stops recording then, so can I reset sock position with arm or? 
-
+# TODO profile policy
+# TODO ACT and smolVLA FPS. That matters right?
 
 ########################################################
 # Visualizing datasets
