@@ -13,15 +13,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+from collections import deque
+
 import torch
 from torch import nn
 
 
-def populate_queues(queues, batch):
+def populate_queues(
+    queues: dict[str, deque], batch: dict[str, torch.Tensor], exclude_keys: list[str] | None = None
+):
+    if exclude_keys is None:
+        exclude_keys = []
     for key in batch:
         # Ignore keys not in the queues already (leaving the responsibility to the caller to make sure the
         # queues have the keys they want).
-        if key not in queues:
+        if key not in queues or key in exclude_keys:
             continue
         if len(queues[key]) != queues[key].maxlen:
             # initialize by copying the first observation several times until the queue is full
@@ -47,3 +54,20 @@ def get_dtype_from_parameters(module: nn.Module) -> torch.dtype:
     Note: assumes that all parameters have the same dtype.
     """
     return next(iter(module.parameters())).dtype
+
+
+def get_output_shape(module: nn.Module, input_shape: tuple) -> tuple:
+    """
+    Calculates the output shape of a PyTorch module given an input shape.
+
+    Args:
+        module (nn.Module): a PyTorch module
+        input_shape (tuple): A tuple representing the input shape, e.g., (batch_size, channels, height, width)
+
+    Returns:
+        tuple: The output shape of the module.
+    """
+    dummy_input = torch.zeros(size=input_shape)
+    with torch.inference_mode():
+        output = module(dummy_input)
+    return tuple(output.shape)

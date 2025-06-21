@@ -17,16 +17,17 @@ import logging
 import os
 import os.path as osp
 import platform
-import random
-from contextlib import contextmanager
+import select
+import subprocess
+import sys
+import time
+from copy import copy, deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Generator
+from statistics import mean
 
-import hydra
 import numpy as np
 import torch
-from omegaconf import DictConfig
 
 
 def none_or_int(value):
@@ -41,9 +42,24 @@ def inside_slurm():
     return "SLURM_JOB_ID" in os.environ
 
 
-def get_safe_torch_device(cfg_device: str, log: bool = False) -> torch.device:
+def auto_select_torch_device() -> torch.device:
+    """Tries to select automatically a torch device."""
+    if torch.cuda.is_available():
+        logging.info("Cuda backend detected, using cuda.")
+        return torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        logging.info("Metal backend detected, using cuda.")
+        return torch.device("mps")
+    else:
+        logging.warning("No accelerated backend detected. Using default cpu, this will be slow.")
+        return torch.device("cpu")
+
+
+# TODO(Steven): Remove log. log shouldn't be an argument, this should be handled by the logger level
+def get_safe_torch_device(try_device: str, log: bool = False) -> torch.device:
     """Given a string, return a torch.device with checks on whether the device is available."""
-    match cfg_device:
+    try_device = str(try_device)
+    match try_device:
         case "cuda":
             assert torch.cuda.is_available()
             device = torch.device("cuda")
@@ -55,71 +71,57 @@ def get_safe_torch_device(cfg_device: str, log: bool = False) -> torch.device:
             if log:
                 logging.warning("Using CPU, this will be slow.")
         case _:
-            device = torch.device(cfg_device)
+            device = torch.device(try_device)
             if log:
-                logging.warning(f"Using custom {cfg_device} device.")
+                logging.warning(f"Using custom {try_device} device.")
 
     return device
 
 
-def get_global_random_state() -> dict[str, Any]:
-    """Get the random state for `random`, `numpy`, and `torch`."""
-    random_state_dict = {
-        "random_state": random.getstate(),
-        "numpy_random_state": np.random.get_state(),
-        "torch_random_state": torch.random.get_rng_state(),
-    }
-    if torch.cuda.is_available():
-        random_state_dict["torch_cuda_random_state"] = torch.cuda.random.get_rng_state()
-    return random_state_dict
-
-
-def set_global_random_state(random_state_dict: dict[str, Any]):
-    """Set the random state for `random`, `numpy`, and `torch`.
-
-    Args:
-        random_state_dict: A dictionary of the form returned by `get_global_random_state`.
+def get_safe_dtype(dtype: torch.dtype, device: str | torch.device):
     """
-    random.setstate(random_state_dict["random_state"])
-    np.random.set_state(random_state_dict["numpy_random_state"])
-    torch.random.set_rng_state(random_state_dict["torch_random_state"])
-    if torch.cuda.is_available():
-        torch.cuda.random.set_rng_state(random_state_dict["torch_cuda_random_state"])
-
-
-def set_global_seed(seed):
-    """Set seed for reproducibility."""
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-
-
-@contextmanager
-def seeded_context(seed: int) -> Generator[None, None, None]:
-    """Set the seed when entering a context, and restore the prior random state at exit.
-
-    Example usage:
-
-    ```
-    a = random.random()  # produces some random number
-    with seeded_context(1337):
-        b = random.random()  # produces some other random number
-    c = random.random()  # produces yet another random number, but the same it would have if we never made `b`
-    ```
+    mps is currently not compatible with float64
     """
-    random_state_dict = get_global_random_state()
-    set_global_seed(seed)
-    yield None
-    set_global_random_state(random_state_dict)
+    if isinstance(device, torch.device):
+        device = device.type
+    if device == "mps" and dtype == torch.float64:
+        return torch.float32
+    else:
+        return dtype
 
 
-def init_logging():
+def is_torch_device_available(try_device: str) -> bool:
+    try_device = str(try_device)  # Ensure try_device is a string
+    if try_device == "cuda":
+        return torch.cuda.is_available()
+    elif try_device == "mps":
+        return torch.backends.mps.is_available()
+    elif try_device == "cpu":
+        return True
+    else:
+        raise ValueError(f"Unknown device {try_device}. Supported devices are: cuda, mps or cpu.")
+
+
+def is_amp_available(device: str):
+    if device in ["cuda", "cpu"]:
+        return True
+    elif device == "mps":
+        return False
+    else:
+        raise ValueError(f"Unknown device '{device}.")
+
+
+def init_logging(log_file: Path | None = None, display_pid: bool = False):
     def custom_format(record):
         dt = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         fnameline = f"{record.pathname}:{record.lineno}"
-        message = f"{record.levelname} {dt} {fnameline[-15:]:>15} {record.msg}"
+
+        # NOTE: Display PID is useful for multi-process logging.
+        if display_pid:
+            pid_str = f"[PID: {os.getpid()}]"
+            message = f"{record.levelname} {pid_str} {dt} {fnameline[-15:]:>15} {record.msg}"
+        else:
+            message = f"{record.levelname} {dt} {fnameline[-15:]:>15} {record.msg}"
         return message
 
     logging.basicConfig(level=logging.INFO)
@@ -132,6 +134,12 @@ def init_logging():
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     logging.getLogger().addHandler(console_handler)
+
+    if log_file is not None:
+        # Additionally write logs to file
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(formatter)
+        logging.getLogger().addHandler(file_handler)
 
 
 def format_big_number(num, precision=0):
@@ -159,22 +167,6 @@ def _relative_path_between(path1: Path, path2: Path) -> Path:
         )
 
 
-def init_hydra_config(config_path: str, overrides: list[str] | None = None) -> DictConfig:
-    """Initialize a Hydra config given only the path to the relevant config file.
-
-    For config resolution, it is assumed that the config file's parent is the Hydra config dir.
-    """
-    # TODO(alexander-soare): Resolve configs without Hydra initialization.
-    hydra.core.global_hydra.GlobalHydra.instance().clear()
-    # Hydra needs a path relative to this file.
-    hydra.initialize(
-        str(_relative_path_between(Path(config_path).absolute().parent, Path(__file__).absolute().parent)),
-        version_base="1.2",
-    )
-    cfg = hydra.compose(Path(config_path).stem, overrides)
-    return cfg
-
-
 def print_cuda_memory_usage():
     """Use this function to locate and debug memory leak."""
     import gc
@@ -193,23 +185,31 @@ def capture_timestamp_utc():
 
 
 def say(text, blocking=False):
-    # Check if mac, linux, or windows.
-    if platform.system() == "Darwin":
-        cmd = f'say "{text}"'
-        if not blocking:
-            cmd += " &"
-    elif platform.system() == "Linux":
-        cmd = f'spd-say "{text}"'
-        if blocking:
-            cmd += "  --wait"
-    elif platform.system() == "Windows":
-        # TODO(rcadene): Make blocking option work for Windows
-        cmd = (
-            'PowerShell -Command "Add-Type -AssemblyName System.Speech; '
-            f"(New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak('{text}')\""
-        )
+    system = platform.system()
 
-    os.system(cmd)
+    if system == "Darwin":
+        cmd = ["say", text]
+
+    elif system == "Linux":
+        cmd = ["spd-say", text]
+        if blocking:
+            cmd.append("--wait")
+
+    elif system == "Windows":
+        cmd = [
+            "PowerShell",
+            "-Command",
+            "Add-Type -AssemblyName System.Speech; "
+            f"(New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak('{text}')",
+        ]
+
+    else:
+        raise RuntimeError("Unsupported operating system for text-to-speech.")
+
+    if blocking:
+        subprocess.run(cmd, check=True)
+    else:
+        subprocess.Popen(cmd, creationflags=subprocess.CREATE_NO_WINDOW if system == "Windows" else 0)
 
 
 def log_say(text, play_sounds, blocking=False):
@@ -217,3 +217,158 @@ def log_say(text, play_sounds, blocking=False):
 
     if play_sounds:
         say(text, blocking)
+
+
+def get_channel_first_image_shape(image_shape: tuple) -> tuple:
+    shape = copy(image_shape)
+    if shape[2] < shape[0] and shape[2] < shape[1]:  # (h, w, c) -> (c, h, w)
+        shape = (shape[2], shape[0], shape[1])
+    elif not (shape[0] < shape[1] and shape[0] < shape[2]):
+        raise ValueError(image_shape)
+
+    return shape
+
+
+def has_method(cls: object, method_name: str) -> bool:
+    return hasattr(cls, method_name) and callable(getattr(cls, method_name))
+
+
+def is_valid_numpy_dtype_string(dtype_str: str) -> bool:
+    """
+    Return True if a given string can be converted to a numpy dtype.
+    """
+    try:
+        # Attempt to convert the string to a numpy dtype
+        np.dtype(dtype_str)
+        return True
+    except TypeError:
+        # If a TypeError is raised, the string is not a valid dtype
+        return False
+
+
+def enter_pressed() -> bool:
+    if platform.system() == "Windows":
+        import msvcrt
+
+        if msvcrt.kbhit():
+            key = msvcrt.getch()
+            return key in (b"\r", b"\n")  # enter key
+        return False
+    else:
+        return select.select([sys.stdin], [], [], 0)[0] and sys.stdin.readline().strip() == ""
+
+
+def move_cursor_up(lines):
+    """Move the cursor up by a specified number of lines."""
+    print(f"\033[{lines}A", end="")
+
+
+class TimerManager:
+    """
+    Lightweight utility to measure elapsed time.
+
+    Examples
+    --------
+    ```python
+    # Example 1: Using context manager
+    timer = TimerManager("Policy", log=False)
+    for _ in range(3):
+        with timer:
+            time.sleep(0.01)
+    print(timer.last, timer.fps_avg, timer.percentile(90))  # Prints: 0.01 100.0 0.01
+    ```
+
+    ```python
+    # Example 2: Using start/stop methods
+    timer = TimerManager("Policy", log=False)
+    timer.start()
+    time.sleep(0.01)
+    timer.stop()
+    print(timer.last, timer.fps_avg, timer.percentile(90))  # Prints: 0.01 100.0 0.01
+    ```
+    """
+
+    def __init__(
+        self,
+        label: str = "Elapsed-time",
+        log: bool = True,
+        logger: logging.Logger | None = None,
+    ):
+        self.label = label
+        self.log = log
+        self.logger = logger
+        self._start: float | None = None
+        self._history: list[float] = []
+
+    def __enter__(self):
+        return self.start()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
+
+    def start(self):
+        self._start = time.perf_counter()
+        return self
+
+    def stop(self) -> float:
+        if self._start is None:
+            raise RuntimeError("Timer was never started.")
+        elapsed = time.perf_counter() - self._start
+        self._history.append(elapsed)
+        self._start = None
+        if self.log:
+            if self.logger is not None:
+                self.logger.info(f"{self.label}: {elapsed:.6f} s")
+            else:
+                logging.info(f"{self.label}: {elapsed:.6f} s")
+        return elapsed
+
+    def reset(self):
+        self._history.clear()
+
+    @property
+    def last(self) -> float:
+        return self._history[-1] if self._history else 0.0
+
+    @property
+    def avg(self) -> float:
+        return mean(self._history) if self._history else 0.0
+
+    @property
+    def total(self) -> float:
+        return sum(self._history)
+
+    @property
+    def count(self) -> int:
+        return len(self._history)
+
+    @property
+    def history(self) -> list[float]:
+        return deepcopy(self._history)
+
+    @property
+    def fps_history(self) -> list[float]:
+        return [1.0 / t for t in self._history]
+
+    @property
+    def fps_last(self) -> float:
+        return 0.0 if self.last == 0 else 1.0 / self.last
+
+    @property
+    def fps_avg(self) -> float:
+        return 0.0 if self.avg == 0 else 1.0 / self.avg
+
+    def percentile(self, p: float) -> float:
+        """
+        Return the p-th percentile of recorded times.
+        """
+        if not self._history:
+            return 0.0
+        return float(np.percentile(self._history, p))
+
+    def fps_percentile(self, p: float) -> float:
+        """
+        FPS corresponding to the p-th percentile time.
+        """
+        val = self.percentile(p)
+        return 0.0 if val == 0 else 1.0 / val
