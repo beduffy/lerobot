@@ -81,8 +81,10 @@ class Robot(abc.ABC):
 
     def _load_calibration(self, fpath: Path | None = None) -> None:
         fpath = self.calibration_fpath if fpath is None else fpath
+        print(f"Loading calibration from {fpath}")
         with open(fpath) as f, draccus.config_type("json"):
             self.calibration = draccus.load(dict[str, MotorCalibration], f)
+            print(f"Loaded calibration from {fpath}: {self.calibration}")
 
     def _save_calibration(self, fpath: Path | None = None) -> None:
         fpath = self.calibration_fpath if fpath is None else fpath
