@@ -96,8 +96,8 @@ class DatasetRecordConfig:
     fps: int = 30
     # Number of seconds for data recording for each episode.
     episode_time_s: int | float = 60
-    # Number of seconds for resetting the environment after each episode.
-    reset_time_s: int | float = 60
+    # Number of seconds for resettingthe environment after each episode.
+    reset_time_s: int | float = 13
     # Number of episodes to record.
     num_episodes: int = 50
     # Encode frames in the dataset into video
@@ -139,15 +139,15 @@ class RecordConfig:
     resume: bool = False
 
     def __post_init__(self):
-        if bool(self.teleop) == bool(self.policy):
-            raise ValueError("Choose either a policy or a teleoperator to control the robot")
-
         # HACK: We parse again the cli args here to get the pretrained path if there was one.
         policy_path = parser.get_path_arg("policy")
-        if policy_path:
+        if policy_path and not self.policy:
             cli_overrides = parser.get_cli_overrides("policy")
             self.policy = PreTrainedConfig.from_pretrained(policy_path, cli_overrides=cli_overrides)
             self.policy.pretrained_path = policy_path
+
+        if bool(self.teleop) == bool(self.policy):
+            raise ValueError("Choose either a policy or a teleoperator to control the robot")
 
     @classmethod
     def __get_path_fields__(cls) -> list[str]:
