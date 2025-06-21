@@ -1,0 +1,120 @@
+python lerobot/scripts/train.py \
+  hydra.job.name=act_aloha_sim_transfer_cube_human \
+  hydra.run.dir=outputs/train/act_aloha_sim_transfer_cube_human \
+  policy=act \
+  policy.use_vae=true \
+  env=aloha \
+  env.task=AlohaTransferCube-v0 \
+  dataset_repo_id=lerobot/aloha_sim_transfer_cube_human \
+  training.eval_freq=10000 \
+  training.log_freq=250 \
+  training.offline_steps=100000 \
+  training.save_model=true \
+  training.save_freq=2000 \
+  eval.n_episodes=50 \
+  eval.batch_size=50 \
+  wandb.enable=true \
+  device=cuda
+
+
+# above has issue with save save_model
+
+
+python lerobot/scripts/train.py \
+  hydra.job.name=act_aloha_sim_transfer_cube_human \
+  hydra.run.dir=outputs/train/act_aloha_sim_transfer_cube_human \
+  policy=act \
+  policy.use_vae=true \
+  env=aloha \
+  env.task=AlohaTransferCube-v0 \
+  dataset_repo_id=lerobot/aloha_sim_transfer_cube_human \
+  training.eval_freq=10000 \
+  training.log_freq=250 \
+  training.offline_steps=100000 \
+  training.save_freq=2000 \
+  eval.n_episodes=50 \
+  eval.batch_size=50 \
+  wandb.enable=true \
+  device=cuda
+
+# above failed on eval due to opengl error
+
+
+MUJOCO_GL=egl python lerobot/scripts/train.py \
+  hydra.job.name=act_aloha_sim_transfer_cube_human \
+  hydra.run.dir=outputs/train/act_aloha_sim_transfer_cube_human \
+  policy=act \
+  policy.use_vae=true \
+  env=aloha \
+  env.task=AlohaTransferCube-v0 \
+  dataset_repo_id=lerobot/aloha_sim_transfer_cube_human \
+  training.eval_freq=1000 \
+  training.log_freq=250 \
+  training.offline_steps=100000 \
+  training.save_freq=2000 \
+  eval.n_episodes=50 \
+  eval.batch_size=50 \
+  wandb.enable=true \
+  device=cuda
+
+python lerobot/scripts/control_sim_robot_keyboard.py teleoperate --robot-path lerobot/configs/robot/aloha.yaml --sim-config lerobot/configs/env/aloha.yaml
+
+
+python lerobot/scripts/control_sim_robot_keyboard.py record --robot-path lerobot/configs/robot/aloha.yaml --sim-config lerobot/configs/env/aloha.yaml --num-episodes 1 --task AlohaInsertion-v0 --repo-id $USER/ben_keyboard_aloha_control --fps 30  --display-cameras 1
+python lerobot/scripts/control_sim_robot_keyboard.py record --robot-path lerobot/configs/robot/aloha.yaml --sim-config lerobot/configs/env/aloha.yaml --num-episodes 1 --task AlohaInsertion-v0 --repo-id $USER/ben_keyboard_aloha_control --fps 30  --display-cameras 1 --episode-time-s 5 --num-image-writer-processes 1
+
+
+# training on above dataset
+MUJOCO_GL=egl python lerobot/scripts/train.py \
+  hydra.job.name=action_change_insertion_ben_hack \
+  hydra.run.dir=outputs/train/action_change_insertion_ben_hack \
+  policy=act \
+  policy.use_vae=true \
+  env=aloha \
+  env.task=AlohaInsertion-v0 \
+  dataset_repo_id=ben/ben_keyboard_aloha_control \
+  training.eval_freq=1000 \
+  training.log_freq=250 \
+  training.offline_steps=100000 \
+  training.save_freq=2000 \
+  eval.n_episodes=50 \
+  eval.batch_size=50 \
+  wandb.enable=true \
+  device=cpu
+
+
+# below got me a bit further
+MUJOCO_GL=egl python lerobot/scripts/train.py \
+  hydra.job.name=action_change_insertion_ben_hack \
+  hydra.run.dir=outputs/train/action_change_insertion_ben_hack \
+  policy=act \
+  policy.use_vae=true \
+  env=aloha \
+  env.task=AlohaInsertion-v0 \
+  dataset_repo_id=ben/ben_keyboard_aloha_control \
+  training.eval_freq=1000 \
+  training.log_freq=250 \
+  training.offline_steps=100000 \
+  training.save_freq=2000 \
+  eval.n_episodes=50 \
+  eval.batch_size=50 \
+  wandb.enable=true \
+  device=cpu \
+  fps=30 \
+  policy.chunk_size=30 \
+  policy.n_action_steps=3
+
+
+python lerobot/scripts/control_sim_robot_keyboard.py replay --robot-path lerobot/configs/robot/aloha.yaml --sim-config lerobot/configs/env/aloha.yaml --repo-id $USER/ben_keyboard_aloha_control --root /home/ben/.cache/huggingface/lerobot/ --episode 0 --fps 30
+INFO 2024-12-24 21:43:34 /__init__.py:88 MUJOCO_GL is not set, so an OpenGL backend will be chosen automatically.
+INFO 2024-12-24 21:43:34 /__init__.py:96 Successfully imported OpenGL backend: %s
+INFO 2024-12-24 21:43:34 /__init__.py:31 MuJoCo library version is: %s
+root /home/ben/.cache/huggingface/lerobot
+repo_id ben/ben_keyboard_aloha_control
+local_dir /home/ben/.cache/huggingface/lerobot/ben/ben_keyboard_aloha_control
+Returning existing local_dir `/home/ben/.cache/huggingface/lerobot` as remote repo cannot be accessed in `snapshot_download` (None).
+
+
+
+# below worked! 
+python lerobot/scripts/visualize_dataset.py  --repo-id $USER/ben_keyboard_aloha_control --episode-index 0 --local-files-only 1

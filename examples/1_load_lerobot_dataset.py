@@ -41,6 +41,7 @@ pprint(lerobot.available_datasets)
 # You can also browse through the datasets created/ported by the community on the hub using the hub api:
 hub_api = HfApi()
 repo_ids = [info.id for info in hub_api.list_datasets(task_categories="robotics", tags=["LeRobot"])]
+print('repo ids\n\n')
 pprint(repo_ids)
 
 # Or simply explore them in your web browser directly at:

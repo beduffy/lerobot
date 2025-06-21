@@ -133,7 +133,13 @@ else:
 fps = env.metadata["render_fps"]
 
 # Encode all frames into a mp4 video.
-video_path = output_directory / "rollout.mp4"
+video_path = output_directory / "rollout_new.mp4"
 imageio.mimsave(str(video_path), numpy.stack(frames), fps=fps)
 
 print(f"Video of the evaluation is available in '{video_path}'.")
+
+# step=299 reward=0.7782285826823953 terminated=False
+# Failure!
+# IMAGEIO FFMPEG_WRITER WARNING: input image is not divisible by macro_block_size=16, resizing from (680, 680) to (688, 688) to ensure video compatibility with most codecs and players. To prevent resizing, make your input image divisible by the macro_block_size or set the macro_block_size to 1 (risking incompatibility).
+# [swscaler @ 0x18d96e40] Warning: data is not aligned! This can lead to a speed loss
+# Video of the evaluation is available in 'outputs/eval/example_pusht_diffusion/rollout.mp4'.
