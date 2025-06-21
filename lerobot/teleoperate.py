@@ -116,13 +116,16 @@ def teleoperate(cfg: TeleoperateConfig):
     if cfg.display_data:
         _init_rerun(session_name="teleoperation")
 
+    print('Making both robots from configs...')
     teleop = make_teleoperator_from_config(cfg.teleop)
     robot = make_robot_from_config(cfg.robot)
 
+    print("Connecting to teleop...")
     teleop.connect()
     robot.connect()
 
     try:
+        # import pdb;pdb.set_trace()
         teleop_loop(teleop, robot, cfg.fps, display_data=cfg.display_data, duration=cfg.teleop_time_s)
     except KeyboardInterrupt:
         pass
