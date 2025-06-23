@@ -69,6 +69,7 @@
   <worldbody>
     <!-- Ground plane -->
     <light name="top" pos="0 0 2" castshadow="true"/>
+    <light name="top2" pos="1 1 2" castshadow="true"/>
     <geom name="floor" type="plane" size="1.5 1.5 0.1" material="ground_mat" contype="1" conaffinity="1" />
 
     <!-- Robot -->
@@ -133,9 +134,10 @@
     </body>
 
     <!-- A cube to be manipulated -->
-    <body name="cube" pos="0.25 0 0.025">
-      <joint name="cube_joint" type="free" damping="0.01"/>
-      <geom name="cube_geom" type="box" size="0.0125 0.0125 0.0125" rgba="0.9 0.1 0.1 1" mass="0.05" contype="1" conaffinity="1" solref="0.02 1" solimp="0.9 0.95 0.001"/>
+    <body name="cube" pos="0.0 -0.15 0.02">
+        <joint name="cube_joint" type="free" frictionloss="0.01" />
+        <inertial pos="0 0 0" mass="0.05" diaginertia="0.0008 0.0008 0.0008" />
+        <geom name="cube_geom" type="box" size="0.0125 0.0125 0.0125" rgba="1 0 0 1" condim="4" friction="1 0.005 0.0001" solref="0.01 1" solimp="2 1 0.01"/>
     </body>
   </worldbody>
 
