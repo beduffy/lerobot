@@ -76,7 +76,10 @@ def teleoperate_sim(cfg: TeleoperateSimConfig):
     print("Mujoco joint names:", mujoco_joint_names)
     mujoco_indices = [mujoco_joint_names.index(str(i)) for i in range(1, 7)]
 
-    if not cfg.use_random_actions:
+    if cfg.use_random_actions:
+        # Start at an initial position (all zeros) for random delta actions.
+        current_joint_degs = np.zeros(6)
+    else:
         if cfg.teleop is None:
             raise ValueError("Teleop config is required when not using random actions.")
         teleop = make_teleoperator_from_config(cfg.teleop)
@@ -86,11 +89,11 @@ def teleoperate_sim(cfg: TeleoperateSimConfig):
         with mujoco.viewer.launch_passive(model, data) as viewer:
             while viewer.is_running():
                 if cfg.use_random_actions:
-                    # Create a dummy action with random values since no leader arm is connected.
-                    # The values are in degrees, and will be converted to radians.
-                    # A range of [-90, 90] degrees seems reasonable for random movements.
-                    action_values = np.random.uniform(-90, 90, 6)
-                    action = {f"joint_{i+1}": v for i, v in enumerate(action_values)}
+                    # Apply a random delta to the current joint angles to create smoother motion.
+                    # A delta of [-5, 5] degrees per step seems reasonable.
+                    delta_degs = np.random.uniform(-5, 5, 6)
+                    current_joint_degs += delta_degs
+                    action = {f"joint_{i+1}": v for i, v in enumerate(current_joint_degs)}
                 else:
                     action = teleop.get_action()
 
