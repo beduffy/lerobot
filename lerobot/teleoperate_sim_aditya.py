@@ -1,4 +1,3 @@
-
 """
 Copied from here: https://github.com/adityakamath/lerobot/blob/mujoco-teleop/lerobot/teleoperate_sim.py
 Simulated teleoperation: reads teleoperator hardware input and uses it to control a Mujoco simulation.
@@ -19,6 +18,14 @@ python -m lerobot.teleoperate_sim_aditya \
     --teleop.id=my_awesome_leader_arm \
     --mjcf_path=/home/ben/all_projects/SO-ARM100/Simulation/SO101/so101_new_calib.xml \
     --display_data=true
+
+python -m lerobot.teleoperate_sim_aditya \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM0 \
+    --teleop.id=my_awesome_leader_arm \
+    --mjcf_path=lerobot/standalone_scene.xml \
+    --display_data=true \
+    --use_random_actions=false
 """
 
 import time
@@ -41,15 +48,17 @@ from lerobot.common.utils.visualization_utils import _init_rerun
 import numpy as np
 
 from .common.teleoperators import koch_leader, so100_leader, so101_leader  # noqa: F401
+from typing import Optional
 
 print('Mujoco version:', mujoco.__version__)
 
 @dataclass
 class TeleoperateSimConfig:
-    teleop: TeleoperatorConfig
     mjcf_path: str
+    teleop: Optional[TeleoperatorConfig] = None
     fps: int = 10
     display_data: bool = False
+    use_random_actions: bool = False
 
 @draccus.wrap()
 def teleoperate_sim(cfg: TeleoperateSimConfig):
@@ -67,18 +76,23 @@ def teleoperate_sim(cfg: TeleoperateSimConfig):
     print("Mujoco joint names:", mujoco_joint_names)
     mujoco_indices = [mujoco_joint_names.index(str(i)) for i in range(1, 7)]
 
-    teleop = make_teleoperator_from_config(cfg.teleop)
-    teleop.connect()
+    if not cfg.use_random_actions:
+        if cfg.teleop is None:
+            raise ValueError("Teleop config is required when not using random actions.")
+        teleop = make_teleoperator_from_config(cfg.teleop)
+        teleop.connect()
 
     try:
         with mujoco.viewer.launch_passive(model, data) as viewer:
             while viewer.is_running():
-                action = teleop.get_action()
-                # Create a dummy action with random values since no leader arm is connected.
-                # The values are in degrees, and will be converted to radians.
-                # A range of [-90, 90] degrees seems reasonable for random movements.
-                # action_values = np.random.uniform(-90, 90, 6)
-                # action = {f"joint_{i+1}": v for i, v in enumerate(action_values)}
+                if cfg.use_random_actions:
+                    # Create a dummy action with random values since no leader arm is connected.
+                    # The values are in degrees, and will be converted to radians.
+                    # A range of [-90, 90] degrees seems reasonable for random movements.
+                    action_values = np.random.uniform(-90, 90, 6)
+                    action = {f"joint_{i+1}": v for i, v in enumerate(action_values)}
+                else:
+                    action = teleop.get_action()
 
                 # Map the first 6 teleop joint values (in order) to Mujoco joints "1"-"6"
                 joint_values = list(action.values())[:6]
@@ -101,7 +115,8 @@ def teleoperate_sim(cfg: TeleoperateSimConfig):
     finally:
         if cfg.display_data:
             rr.rerun_shutdown()
-        # teleop.disconnect()
+        if not cfg.use_random_actions:
+            teleop.disconnect()
 
 if __name__ == "__main__":
     teleoperate_sim()
