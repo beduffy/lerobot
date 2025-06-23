@@ -1,4 +1,3 @@
-# TODO merge my two forks or start committing or something?
 # TODO clear space on lightning and wandb, 
 # TODO maybe don't save models to wandb?
 # TODO understand when voice says episode over, it stops recording then, so can I reset sock position with arm or? 
@@ -6,8 +5,144 @@
 # TODO evaluate smolVLA, diffusion. 
 # TODO train diffusion and compare to others
 # TODO do train eval splits
-# TODO how to save bashrc on lightning? probably just bashrc somewhere. lightning using fork
-# TODO create jupyter notebooks instead of bash scripts
+
+
+# lightning ai display remote
+xpra start \
+    --bind-tcp=0.0.0.0:14500 \
+    --html=on \
+    --daemon=no \          
+    --start=xeyes \
+    :100
+
+xpra start \
+   --xvfb=no \                       
+   --xorg-driver=nvidia \            
+   --bind-tcp=0.0.0.0:14500 \
+   --html=on \
+   --encoding=nvenc_h264 \           
+   --quality=70 --min-quality=30 --speed=1 \
+   --daemon=no \
+   --start="python3 basic_bullet.py" \
+   :100
+
+docker run --gpus all -it --rm \
+  --network host \                       
+  --shm-size=2g \                        
+  -e ACCEPT_EULA=Y -e PRIVACY_CONSENT=Y \
+  nvcr.io/nvidia/isaac-sim:4.5.0
+
+# to avoid downloads by caching
+docker run --gpus all -it --rm \
+  -e DISPLAY=$DISPLAY \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  --ipc=host \
+  -e ACCEPT_EULA=Y -e PRIVACY_CONSENT=Y \
+  -v $HOME/ov_cache/ov:/root/.cache/ov \
+  -v $HOME/ov_cache/kit:/root/.local/share/kit \
+  -e KIT_CACHE_DIR=/root/.local/share/kit            \
+  -e KIT_DISABLE_EXTS_AUTOUPDATE=1                   \
+  -e OV_ASSET_RESOLVER_SKIP_WRITE=1                  \
+  nvcr.io/nvidia/isaac-sim:4.5.0
+
+
+
+# to solve known bug in the 535.xx Linux driver-series on Turing (Tesla T4)
+docker run --rm --gpus all --network host \
+  -e NVIDIA_DRIVER_CAPABILITIES=graphics,utility,video,compute \
+  -v $HOME/ov_cache/ov:/root/.cache/ov \
+  -v $HOME/ov_cache/kit:/root/.local/share/kit \
+  -e ACCEPT_EULA=Y -e PRIVACY_CONSENT=Y \
+  nvcr.io/nvidia/isaac-sim:4.5.0 \
+  --no-window \
+  --/renderer/vulkan/use_timeline_semaphores=false      \   
+  --/persistent/isaac/asset_root/default=http://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/4.5 \
+  --merge-config=/isaac-sim/config/open_endpoint.toml
+  --/exts/isaacsim.ros2.bridge/enabled=false
+
+
+
+# to try web rtc
+docker run --rm --gpus all --network host \
+  -e NVIDIA_DRIVER_CAPABILITIES=graphics,utility,video,compute \
+  -v $HOME/ov_cache/ov:/root/.cache/ov \
+  -v $HOME/ov_cache/kit:/root/.local/share/kit \
+  -e ACCEPT_EULA=Y -e PRIVACY_CONSENT=Y \
+  nvcr.io/nvidia/isaac-sim:4.5.0 \
+  --no-window \
+  --/exts/isaacsim.ros2.bridge/enabled=false \
+  --/exts/omni.kit.livestream.webrtc/https_enabled=false \
+  --/exts/omni.kit.livestream.webrtc/websocket_ssl_enabled=false \
+  --/exts/omni.kit.livestream.webrtc/cert_path="" \
+  --/exts/omni.kit.livestream.webrtc/http_port=8211 \
+  --/exts/omni.kit.livestream.webrtc/websocket_port=8212 \
+  --merge-config=/isaac-sim/config/open_endpoint.toml \
+  --/persistent/isaac/asset_root/default=http://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/4.5 \
+  --/renderer/vulkan/use_timeline_semaphores=false 
+
+
+
+
+docker run --rm --gpus all --network host \
+  -e NVIDIA_DRIVER_CAPABILITIES=graphics,utility,video,compute \
+  -v $HOME/ov_cache/ov:/root/.cache/ov \
+  -v $HOME/ov_cache/kit:/root/.local/share/kit \
+  -e ACCEPT_EULA=Y -e PRIVACY_CONSENT=Y \
+  nvcr.io/nvidia/isaac-sim:4.5.0 \
+  --no-window \
+  --/exts/isaacsim.ros2.bridge/enabled=false \
+  --/exts/omni.services.transport.server.http/interface=0.0.0.0 \
+  --/exts/omni.services.transport.server.http/port=8211 \
+  --/exts/omni.services.transport.server.websocket/interface=0.0.0.0 \
+  --/exts/omni.services.transport.server.websocket/port=8212 \
+  --/exts/omni.services.transport.server.http/ssl_enabled=false \
+  --merge-config=/isaac-sim/config/open_endpoint.toml \
+  --/persistent/isaac/asset_root/default=http://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/4.5 \
+  --/renderer/vulkan/use_timeline_semaphores=false
+
+
+# WHAT worked TO GET PREtty print and curl working
+docker run --rm --gpus all --network host \
+  -e NVIDIA_DRIVER_CAPABILITIES=graphics,utility,video,compute \
+  -e ACCEPT_EULA=Y -e PRIVACY_CONSENT=Y \
+  -v $HOME/ov_cache/ov:/root/.cache/ov \
+  -v $HOME/ov_cache/kit:/root/.local/share/kit \
+  --entrypoint /isaac-sim/runheadless.sh \
+  nvcr.io/nvidia/isaac-sim:4.5.0 \
+  --enable omni.services.transport.server.http \
+  --/exts/omni.services.transport.server.http/interface=0.0.0.0 \
+  --/exts/omni.services.transport.server.http/port=8211 \
+  --/exts/omni.services.transport.server.http/ws_port=8212 \
+  --/exts/omni.services.transport.server.http/ssl_enabled=false \
+  --renderer/vulkan/use_timeline_semaphores=false
+
+
+
+
+# what worked to get streaming rtc working on VNC
+docker run --rm --gpus all --network host \
+  -e NVIDIA_DRIVER_CAPABILITIES=graphics,utility,video,compute \
+  -e ACCEPT_EULA=Y -e PRIVACY_CONSENT=Y \
+  -v $HOME/ov_cache/ov:/root/.cache/ov \
+  -v $HOME/ov_cache/kit:/root/.local/share/kit \
+  --entrypoint /isaac-sim/runheadless.sh \
+  nvcr.io/nvidia/isaac-sim:4.5.0 \
+  --enable omni.services.transport.server.http \
+  --/exts/omni.services.transport.server.http/interface=0.0.0.0 \
+  --/exts/omni.services.transport.server.http/port=8211 \
+  --/exts/omni.services.transport.server.http/ws_port=8212 \
+  --/exts/omni.services.transport.server.http/ssl_enabled=false \
+  --renderer/vulkan/use_timeline_semaphores=false
+
+then just 127.0.0.1 address in web rtc app. no ws:// and no specification of port... 
+
+
+
+
+  --/exts/omni.kit.livestream.webrtc/transport/udp_port_range="50000 50019"
+
+
+# TODO create jupyter notebooks instead of bash scripts. Or bash in jupyter but use variable to describe repo id name and other parts
 # TODO ville act feature detector
 # TODO understand shreyas code
 # TODO bigger batch size...?
