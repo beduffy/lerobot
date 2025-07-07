@@ -148,10 +148,6 @@ then just 127.0.0.1 address in web rtc app. no ws:// and no specification of por
 # TODO bigger batch size...?
 # TODO IK
 # TODO MCP
-# omg i should focus on this, 100% accuracy in everything... and if not 100%, then just feed more data and train and intervene. 
-# TODO HL-SERL
-https://chatgpt.com/share/6856946e-157c-8002-87c0-396f8bce16a9
-# TODO hl-serl simulation https://huggingface.co/docs/lerobot/hilserl_sim. nvidia
 # TODO control arm in simulation with leader, get so-100 in sim
 # train and evaluate in sim, train in both? how did russ tedrake do it?
 
@@ -236,3 +232,18 @@ ERROR tests/datasets/test_image_transforms.py::test_backward_compatibility_singl
 ERROR tests/datasets/test_image_transforms.py::test_backward_compatibility_default_config - safetensors_rust.SafetensorError: Error while deserializing header: HeaderTooLarge
 ERROR tests/rl/test_learner_service.py::test_ready_method - RuntimeError: The grpc package installed is at version 1.70.0, but the generated c...
 ==== 46 failed, 564 passed, 17 skipped, 25 warnings, 8 errors
+
+
+
+
+
+############################## HIL-SERL plan #########################################
+
+# omg i should focus on this, 100% accuracy in everything... and if not 100%, then just feed more data and train and intervene. 
+# TODO HL-SERL
+https://chatgpt.com/share/6856946e-157c-8002-87c0-396f8bce16a9
+# TODO hl-serl simulation https://huggingface.co/docs/lerobot/hilserl_sim. nvidia
+
+
+1. Get franka emika env running locally on CPU. DONE
+2. Get franka emika env reward classifier running and model trained and etc. 
