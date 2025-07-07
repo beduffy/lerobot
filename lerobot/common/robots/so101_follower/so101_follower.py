@@ -102,6 +102,7 @@ class SO101Follower(Robot):
 
     @property
     def is_calibrated(self) -> bool:
+        print(f"is_calibrated: {self.bus.is_calibrated}")
         return self.bus.is_calibrated
 
     def calibrate(self) -> None:

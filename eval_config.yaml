@@ -1,0 +1,44 @@
+# Configuration for evaluating a trained policy on the robot
+# using the record.py script.
+
+robot:
+  type: so101_follower
+  port: /dev/ttyACM0
+  id: my_awesome_follower_arm
+  cameras:
+    front:
+      type: opencv
+      index_or_path: 4
+      width: 640
+      height: 480
+      fps: 30
+
+# The `policy` field is intentionally a dictionary with a single `path` key.
+# This structure is specifically designed to trigger the special policy-loading
+# logic within the lerobot/record.py script. The script will use this path
+# to download the model from the Hugging Face Hub and load it.
+policy:
+  # path: bearlover365/act_record-test
+  # path: bearlover365/pick_up_white_sock
+  path: bearlover365/pick_up_white_sock_smolvla_finetune
+  input_features:
+    observation.state:
+      shape: [6]
+      type: STATE
+    observation.images.front:
+      shape: [3, 224, 224]
+      type: VISUAL
+  output_features:
+    action:
+      shape: [6]
+      type: ACTION
+
+dataset:
+  # repo_id: bearlover365/eval_act_record_test
+  # repo_id: bearlover365/eval_pick_up_white_sock
+  repo_id: bearlover365/eval_pick_up_white_sock_smolvla_finetune
+  num_episodes: 5
+  # single_task: "Evaluate the policy"
+  single_task: "Grab the white sock"
+
+display_data: true 

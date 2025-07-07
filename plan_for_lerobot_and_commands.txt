@@ -1,0 +1,571 @@
+I'm at a LeRobot hackathon, and getting two so101 arms first to:
+1. teleoperate (done)
+2. teleoperate with camera (done with loose webcam)
+3. Record sample dataset (done)
+4. Train a policy sample dataset
+4.1 will cpu work for small dataset? if not, how to do it in cloud?
+5. Test the policy on the robot
+6. Work out FPS on CPU or inference over cloud
+7. record big dataset of sock or whatever
+8. train a policy on the big dataset
+9. test it...
+
+
+
+
+Below is a bunch of commands I'm saving to run again for my specific setup
+
+python lerobot/scripts/configure_motor.py \
+  --port /dev/ttyACM0 \
+  --brand feetech \
+  --model sts3215 \
+  --baudrate 1000000 \
+  --ID 1
+
+python lerobot/scripts/configure_motor.py \
+  --port /dev/ttyACM0 \
+  --brand feetech \
+  --model sts3215 \
+  --baudrate 1000000 \
+  --ID 1
+
+python lerobot/scripts/configure_motor.py \
+  --port /dev/ttyACM0 \
+  --brand feetech \
+  --model sts3215 \
+  --baudrate 1000000 \
+  --ID 4
+
+python -m lerobot.setup_motors \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0
+
+python lerobot/scripts/control_robot.py \
+  --robot.type=so101 \
+  --robot.cameras='{}' \
+  --control.type=calibrate \
+  --control.arms='["main_leader"]'
+
+python lerobot/scripts/control_robot.py \
+  --robot.type=so101 \
+  --robot.cameras='{}' \
+  --control.type=calibrate \
+  --control.arms='["main_follower"]'
+
+
+
+python -m lerobot.calibrate \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm
+
+
+python -m lerobot.calibrate \
+    --robot.type=so101_follower \
+    --robot.port=/dev/tty.usbmodem58760431551 \ 
+    --robot.id=my_awesome_follower_arm
+
+python -m lerobot.calibrate \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm
+
+python -m lerobot.teleoperate \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm
+
+
+# what worked, 1 camera
+python -m lerobot.teleoperate \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm \
+    --display_data=true
+
+# 2 cameras
+python -m lerobot.teleoperate \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 6, width: 640, height: 480, fps: 30}, gripper: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm \
+    --display_data=true
+
+
+# record with 1 camera white socks
+python -m lerobot.record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm \
+    --display_data=true \
+    --dataset.repo_id=${HF_USER}/pick_up_white_sock \
+    --dataset.num_episodes=10 \
+    --dataset.single_task="Grab the white sock"
+
+# record with 2 camera black and white socks to container
+python -m lerobot.record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 6, width: 640, height: 480, fps: 30}, gripper: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm \
+    --display_data=true \
+    --dataset.repo_id=${HF_USER}/pick_up_black_and_white_sock_into_red_box \
+    --dataset.num_episodes=60 \
+    --dataset.single_task="Grab the black and white sock and put them into the red box" \
+    --resume=true
+
+
+python -m lerobot.replay \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --dataset.repo_id=${HF_USER}/record-test \
+    --dataset.episode=0
+
+
+# training that works in lightning ai
+python lerobot/scripts/train.py \
+  --dataset.repo_id=${HF_USER}/record-test4_with_permission_changed \
+  --policy.type=act \
+  --output_dir=outputs/train/act_record-test \
+  --job_name=act_record-test3 \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --dataset.video_backend=pyav
+  
+# white sock act
+python lerobot/scripts/train.py \
+  --dataset.repo_id=bearlover365/pick_up_white_sock \
+  --policy.type=act \
+  --output_dir=outputs/train/pick_up_white_sock1 \
+  --job_name=pick_up_white_sock1 \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --dataset.video_backend=pyav
+
+# to resume add e.g.
+--resume=true  --config_path=outputs/train/pick_up_blac
+k_and_white_sock_into_red_box_100/checkpoints/last/pretrained_model/train_config.json
+
+# black and white socks into red box 2 cameras
+python lerobot/scripts/train.py \
+  --dataset.repo_id=bearlover365/pick_up_black_and_white_sock_into_red_box \
+  --policy.type=act \
+  --output_dir=outputs/train/pick_up_black_and_white_sock_into_red_box \
+  --job_name=pick_up_black_and_white_sock_into_red_box1 \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --dataset.video_backend=pyav
+
+# white sock smolvla
+python lerobot/scripts/train.py \
+  --dataset.repo_id=bearlover365/pick_up_white_sock \
+  --policy.path=lerobot/smolvla_base \
+  --batch_size=64 \
+  --output_dir=outputs/train/pick_up_white_sock_smolvla_finetune \
+  --job_name=pick_up_white_sock_smolvla_finetune \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --dataset.video_backend=pyav
+
+
+
+# trying to eval on cpu but with new eval script. never worked.
+python -m lerobot.scripts.eval \
+        --robot.type=so101_follower \
+        --robot.port=/dev/ttyACM0 \
+        --robot.id=my_awesome_follower_arm \
+        --robot.cameras="{ front: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+        --policy_path=${HF_USER}/act_record-test \
+        --device=cpu
+
+WITH t4 updt_s:0.263 = 0.263 x 200 = 52.6 per 200 steps
+With ag10 18.0.092 x 200 = 18.4s per 200 steps
+
+smol vla updt_s:0.793 x 200 = 158.6 per 200 steps
+
+# trying to do the same but with record eval way from docs. 
+python -m lerobot.record  \
+  --robot.type=so100_follower \
+  --robot.port=/dev/ttyACM0 \
+  --robot.cameras="{ up: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}, side: {type: intelrealsense, serial_number_or_name: 233522074606, width: 640, height: 480, fps: 30}}" \
+  --robot.id=my_awesome_follower_arm \
+  --display_data=false \
+  --dataset.repo_id=$HF_USER/eval_so100 \
+  --dataset.single_task="Put lego brick into the transparent box" \
+  --policy.path=${HF_USER}/act_record-test
+
+# worked. 1 camera. wait did it?
+python -m lerobot.record \
+  --robot.type=so101_follower \
+  --robot.port=/dev/ttyACM0 \
+  --robot.id=my_awesome_follower_arm \
+  --robot.cameras="{ front: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+  --control.policy.path=${HF_USER}/act_record-test \
+  --dataset.repo_id=${HF_USER}/eval_act_record_test \
+  --dataset.num_episodes=1 \
+  --display_data=true
+
+# 2 cameras and socks into red box
+python -m lerobot.record \
+  --robot.type=so101_follower \
+  --robot.port=/dev/ttyACM0 \
+  --robot.id=my_awesome_follower_arm \
+  --robot.cameras="{ front: {type: opencv, index_or_path: 6, width: 640, height: 480, fps: 30}, gripper: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+  --policy.path=${HF_USER}/pick_up_black_and_white_sock_into_red_box \
+  --dataset.repo_id=${HF_USER}/eval_pick_up_black_and_white_sock_into_red_box \
+  --dataset.single_task="Grab the black and white sock and put them into the red box" \
+  --dataset.num_episodes=1 \
+  --display_data=true
+
+# 2 cameras and socks into red box, 100 episodes
+python -m lerobot.record \
+  --robot.type=so101_follower \
+  --robot.port=/dev/ttyACM0 \
+  --robot.id=my_awesome_follower_arm \
+  --robot.cameras="{ front: {type: opencv, index_or_path: 6, width: 640, height: 480, fps: 30}, gripper: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+  --policy.path=${HF_USER}/pick_up_black_and_white_sock_into_red_box_100 \
+  --dataset.repo_id=${HF_USER}/eval_pick_up_black_and_white_sock_into_red_box \
+  --dataset.single_task="Grab the black and white sock and put them into the red box" \
+  --dataset.num_episodes=1 \
+  --display_data=true
+
+# between episodes to reload model
+/home/ben/.cache/huggingface/lerobot/bearlover365/eval_pick_up_black_and_white_sock_into_red_box
+
+huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
+
+HF_USER=$(huggingface-cli whoami | head -n 1)
+echo $HF_USER
+
+huggingface-cli upload \         
+      ${HF_USER}/act_record-test \
+      outputs/train/act_record-test/checkpoints/last/pretrained_model \
+      --repo-type=model
+
+huggingface-cli upload \         
+      ${HF_USER}/pick_up_white_sock \
+      outputs/train/pick_up_white_sock1/checkpoints/last/pretrained_model \
+      --repo-type=model
+
+huggingface-cli upload ${HF_USER}/pick_up_white_sock outputs/train/pick_up_white_sock1/checkpoints/last --repo-type=model
+huggingface-cli upload ${HF_USER}/pick_up_white_sock_smolvla_finetune outputs/train/pick_up_white_sock_smolvla_finetune/checkpoints/last --repo-type=model
+
+huggingface-cli upload ${HF_USER}/pick_up_black_and_white_sock_into_red_box outputs/train/pick_up_black_and_white_sock_into_red_box/checkpoints/last/pretrained_model --repo-type=model
+huggingface-cli upload ${HF_USER}/pick_up_black_and_white_sock_into_red_box_100 outputs/train/pick_up_black_and_white_sock_into_red_box_100/checkpoints/last/pretrained_model --repo-type=model
+
+
+
+
+# think it needs pretrained
+huggingface-cli upload \
+      ${HF_USER}/pick_up_white_sock_smolvla_finetune \
+      outputs/train/pick_up_white_sock_smolvla_finetune/checkpoints/last/pretrained_model \
+      --repo-type=model
+
+
+# eval that worked!!
+python -m lerobot.record --config_path eval_config.yaml
+
+
+(robosuite) ben@ben-zephyrus2 ~/all_projects/lerobot (main)$ cat /home/ben/.cache/huggingface/lerobot/calibration/robots/so101_follower/my_awesome_follower_arm.json
+{
+    "shoulder_pan": {
+        "id": 1,
+        "drive_mode": 0,
+        "homing_offset": 56,
+        "range_min": 730,
+        "range_max": 3434
+    },
+    "shoulder_lift": {
+        "id": 2,
+        "drive_mode": 0,
+        "homing_offset": 793,
+        "range_min": 867,
+        "range_max": 3210
+    },
+    "elbow_flex": {
+        "id": 3,
+        "drive_mode": 0,
+        "homing_offset": -729,
+        "range_min": 870,
+        "range_max": 3076
+    },
+    "wrist_flex": {
+        "id": 4,
+        "drive_mode": 0,
+        "homing_offset": -50,
+        "range_min": 945,
+        "range_max": 3217
+    },
+    "wrist_roll": {
+        "id": 5,
+        "drive_mode": 0,
+        "homing_offset": 38,
+        "range_min": 150,
+        "range_max": 3750
+    },
+    "gripper": {
+        "id": 6,
+        "drive_mode": 0,
+        "homing_offset": -530,
+        "range_min": 2047,
+        "range_max": 3482
+    }
+
+
+
+
+(robosuite) ben@ben-zephyrus2 ~/all_projects/lerobot (main)$ cat /home/ben/.cache/huggingface/lerobot/calibration/teleoperators/so101_leader/my_awesome_leader_arm.json 
+{
+    "shoulder_pan": {
+        "id": 1,
+        "drive_mode": 0,
+        "homing_offset": 1180,
+        "range_min": 794,
+        "range_max": 3143
+    },
+    "shoulder_lift": {
+        "id": 2,
+        "drive_mode": 0,
+        "homing_offset": 1368,
+        "range_min": 834,
+        "range_max": 3168
+    },
+    "elbow_flex": {
+        "id": 3,
+        "drive_mode": 0,
+        "homing_offset": -294,
+        "range_min": 908,
+        "range_max": 3130
+    },
+    "wrist_flex": {
+        "id": 4,
+        "drive_mode": 0,
+        "homing_offset": -676,
+        "range_min": 857,
+        "range_max": 3136
+    },
+    "wrist_roll": {
+        "id": 5,
+        "drive_mode": 0,
+        "homing_offset": 155,
+        "range_min": 199,
+        "range_max": 4035
+    },
+    "gripper": {
+        "id": 6,
+        "drive_mode": 0,
+        "homing_offset": -2013,
+        "range_min": 1590,
+        "range_max": 2787
+    }
+
+
+
+
+latest, trying to fix homing offset problem of shoulder motor?
+
+
+/home/ben/.cache/huggingface/lerobot/calibration/robots/so101_follower/my_awesome_follower_arm.json
+(robosuite) ben@ben-zephyrus2 ~/all_projects/lerobot (main)$ cat /home/ben/.cache/huggingface/lerobot/calibration/robots/so101_follower/my_awesome_follower_arm.json
+{
+    "shoulder_pan": {
+        "id": 1,
+        "drive_mode": 0,
+        "homing_offset": 58,
+        "range_min": 732,
+        "range_max": 3430
+    },
+    "shoulder_lift": {
+        "id": 2,
+        "drive_mode": 0,
+        "homing_offset": 813,
+        "range_min": 834,
+        "range_max": 3183
+    },
+    "elbow_flex": {
+        "id": 3,
+        "drive_mode": 0,
+        "homing_offset": -769,
+        "range_min": 908,
+        "range_max": 3121
+    },
+    "wrist_flex": {
+        "id": 4,
+        "drive_mode": 0,
+        "homing_offset": 35,
+        "range_min": 858,
+        "range_max": 3128
+    },
+    "wrist_roll": {
+        "id": 5,
+        "drive_mode": 0,
+        "homing_offset": 33,
+        "range_min": 162,
+        "range_max": 3772
+    },
+    "gripper": {
+        "id": 6,
+        "drive_mode": 0,
+        "homing_offset": -523,
+        "range_min": 2041,
+        "range_max": 3482
+    }
+
+
+
+
+
+
+
+
+
+########################################################
+June 20th 2025, a week after hackathon, a pile of socks in ben's room, controlled lighting, all into red box.
+########################################################
+
+python -m lerobot.teleoperate \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm \
+    --display_data=true
+
+# run in both laptop and in cloud
+huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
+HF_USER=$(huggingface-cli whoami | head -n 1)
+echo $HF_USER
+
+python -m lerobot.record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm \
+    --display_data=true \
+    --dataset.repo_id=${HF_USER}/pile_of_socks_into_red_hamper \
+    --dataset.num_episodes=5 \
+    --dataset.single_task="Grab all socks and put into red hamper"
+
+
+python lerobot/scripts/train.py \
+  --dataset.repo_id=bearlover365/pile_of_socks_into_red_hamper \
+  --policy.type=act \
+  --output_dir=outputs/train/pile_of_socks_into_red_hamper1 \
+  --job_name=pile_of_socks_into_red_hamper1 \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --dataset.video_backend=pyav
+
+
+huggingface-cli upload ${HF_USER}/pile_of_socks_into_red_hamper outputs/train/pile_of_socks_into_red_hamper1/checkpoints/last/pretrained_model --repo-type=model
+
+# evaluate
+python -m lerobot.record \
+  --robot.type=so101_follower \
+  --robot.port=/dev/ttyACM0 \
+  --robot.id=my_awesome_follower_arm \
+  --robot.cameras="{ front: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+  --policy.path=${HF_USER}/pile_of_socks_into_red_hamper \
+  --dataset.repo_id=${HF_USER}/eval_pile_of_socks_into_red_hamper \
+  --dataset.single_task="Grab all socks and put into red hamper" \
+  --dataset.num_episodes=1 \
+--display_data=true
+
+########################################################
+# July 7th 2025, red cube always in same place, 1 demonstration
+########################################################
+
+task_name="red_cube_always_in_same_place"
+# run in both laptop and in cloud
+huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
+HF_USER=$(huggingface-cli whoami | head -n 1)
+echo $HF_USER
+
+python -m lerobot.record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --robot.cameras="{ front: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm \
+    --display_data=true \
+    --dataset.repo_id=${HF_USER}/${task_name} \
+    --dataset.num_episodes=10 \
+    --dataset.single_task="Grab red cube and put to left"
+
+# train in cloud
+task_name="red_cube_always_in_same_place"
+run_count=1
+python lerobot/scripts/train.py \
+  --dataset.repo_id=bearlover365/${task_name} \
+  --policy.type=act \
+  --output_dir=outputs/train/${task_name}_${run_count} \
+  --job_name=${task_name} \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --dataset.video_backend=pyav
+
+huggingface-cli upload ${HF_USER}/${task_name} outputs/train/${task_name}_${run_count}/checkpoints/last/pretrained_model --repo-type=model
+
+# evaluate on laptop
+python -m lerobot.record \
+  --robot.type=so101_follower \
+  --robot.port=/dev/ttyACM0 \
+  --robot.id=my_awesome_follower_arm \
+  --robot.cameras="{ front: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+  --policy.path=${HF_USER}/${task_name} \
+  --dataset.repo_id=${HF_USER}/eval_${task_name} \
+  --dataset.single_task="Grab red cube and put to left" \
+  --dataset.num_episodes=1 \
+  --display_data=true
+
+
+########################################################
+# Visualizing datasets
+########################################################
+
+# TODO didn't work. 
+# `visualize_dataset.py` uses rerun for a detailed, interactive 3D visualization.
+# You can inspect camera streams, actions, and states frame-by-frame.
+# This command visualizes episode 0 of your sock-hamper dataset.
+# Use --video-backend=pyav to avoid torchcodec errors.
+python lerobot/scripts/visualize_dataset.py \
+  --repo-id=${HF_USER}/pile_of_socks_into_red_hamper \
+  --episode-index=0 \
+  --video-backend=pyav
+
+# `visualize_dataset_html.py` starts a web server for a simpler HTML-based overview.
+# After running, open http://localhost:9090 in your browser.
+# This command visualizes your sock-hamper dataset.
+python lerobot/scripts/visualize_dataset_html.py \
+  --repo-id=${HF_USER}/pile_of_socks_into_red_hamper
+
+# You can also select specific episodes to show in the HTML viewer.
+python lerobot/scripts/visualize_dataset_html.py \
+  --repo-id=${HF_USER}/pile_of_socks_into_red_hamper \
+  --episodes 0 2 4

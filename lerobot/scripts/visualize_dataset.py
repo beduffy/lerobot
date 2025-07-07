@@ -266,6 +266,13 @@ def main():
     )
 
     parser.add_argument(
+        "--video-backend",
+        type=str,
+        default="torchcodec",
+        help="Video backend to use for decoding videos ('torchcodec' or 'pyav').",
+    )
+
+    parser.add_argument(
         "--tolerance-s",
         type=float,
         default=1e-4,
@@ -281,11 +288,12 @@ def main():
     repo_id = kwargs.pop("repo_id")
     root = kwargs.pop("root")
     tolerance_s = kwargs.pop("tolerance_s")
+    video_backend = kwargs.pop("video_backend")
 
     logging.info("Loading dataset")
-    dataset = LeRobotDataset(repo_id, root=root, tolerance_s=tolerance_s)
+    dataset = LeRobotDataset(repo_id, root=root, tolerance_s=tolerance_s, video_backend=video_backend)
 
-    visualize_dataset(dataset, **vars(args))
+    visualize_dataset(dataset, **kwargs)
 
 
 if __name__ == "__main__":

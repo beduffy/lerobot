@@ -14,7 +14,7 @@
 
 import abc
 from pathlib import Path
-from typing import Any
+from typing import Any, Type
 
 import draccus
 
@@ -39,7 +39,7 @@ class Robot(abc.ABC):
     """
 
     # Set these in ALL subclasses
-    config_class: RobotConfig
+    config_class: Type[RobotConfig]
     name: str
 
     def __init__(self, config: RobotConfig):
@@ -129,8 +129,10 @@ class Robot(abc.ABC):
             fpath (Path | None): Optional path to the calibration file. Defaults to `self.calibration_fpath`.
         """
         fpath = self.calibration_fpath if fpath is None else fpath
+        print(f"Loading calibration from {fpath}")
         with open(fpath) as f, draccus.config_type("json"):
             self.calibration = draccus.load(dict[str, MotorCalibration], f)
+            print(f"Loaded calibration from {fpath}: {self.calibration}")
 
     def _save_calibration(self, fpath: Path | None = None) -> None:
         """

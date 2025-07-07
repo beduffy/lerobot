@@ -21,6 +21,7 @@ from .robot import Robot
 
 
 def make_robot_from_config(config: RobotConfig) -> Robot:
+    print(f"Making robot from config: {config.type}")
     if config.type == "koch_follower":
         from .koch_follower import KochFollower
 
