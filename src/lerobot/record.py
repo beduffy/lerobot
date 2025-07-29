@@ -126,7 +126,7 @@ class DatasetRecordConfig:
     # Number of seconds for data recording for each episode.
     episode_time_s: int | float = 60
     # Number of seconds for resettingthe environment after each episode.
-    reset_time_s: int | float = 13
+    reset_time_s: int | float = 7
     # Number of episodes to record.
     num_episodes: int = 50
     # Encode frames in the dataset into video

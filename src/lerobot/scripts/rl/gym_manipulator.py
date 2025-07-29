@@ -69,7 +69,25 @@ from lerobot.teleoperators.keyboard.teleop_keyboard import KeyboardEndEffectorTe
 from lerobot.utils.robot_utils import busy_wait
 from lerobot.utils.utils import log_say
 
+import sys
+# TODO(ben): This is a hack to ensure the local version of gym_hil is used.
+sys.path.insert(0, '/home/ben/all_projects/gym-hil')
+
+
 logging.basicConfig(level=logging.INFO)
+
+import traceback
+class TruncationTracerWrapper(gym.Wrapper):
+    """A debug wrapper to find the source of premature truncation."""
+
+    def step(self, action):
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        if truncated:
+            print("--- TRUNCATION DETECTED! STACK TRACE ---")
+            traceback.print_stack()
+            print("-----------------------------------------")
+        return obs, reward, terminated, truncated, info
+    
 
 
 def reset_follower_position(robot_arm, target_position):
@@ -336,6 +354,7 @@ class RobotEnv(gym.Env):
                 - observation (dict): The initial sensor observation.
                 - info (dict): A dictionary with supplementary information, including the key "is_intervention".
         """
+        print('Called gym_manipulator.reset')
         super().reset(seed=seed, options=options)
 
         self.robot.reset()
@@ -574,6 +593,7 @@ class RewardWrapper(gym.Wrapper):
 
         reward = 0.0
         if success == 1.0:
+            print('step reward wrapper terminated true')
             terminated = True
             reward = 1.0
 
@@ -641,7 +661,12 @@ class TimeLimitWrapper(gym.Wrapper):
             logging.debug(f"Current timestep exceeded expected fps {self.fps}")
 
         if self.current_step >= self.max_episode_steps:
+            print('step time limit wrapper terminated true')
             terminated = True
+        if truncated:
+            print('Truncated inside time limit wrapper!')
+        
+            
         return obs, reward, terminated, truncated, info
 
     def reset(self, seed=None, options=None):
@@ -655,6 +680,7 @@ class TimeLimitWrapper(gym.Wrapper):
         Returns:
             The initial observation and info from the wrapped environment.
         """
+        print('Called time limit wrapper reset')
         self.episode_time_in_s = 0.0
         self.last_timestamp = time.perf_counter()
         self.current_step = 0
@@ -841,6 +867,7 @@ class ResetWrapper(gym.Wrapper):
         Returns:
             The initial observation and info from the wrapped environment.
         """
+        print('Called reset wrapper reset')
         start_time = time.perf_counter()
         if self.reset_pose is not None:
             log_say("Reset the environment.", play_sounds=True)
@@ -977,6 +1004,7 @@ class GripperPenaltyWrapper(gym.RewardWrapper):
         Returns:
             The initial observation and info with gripper penalty initialized.
         """
+        print('Called gripper penalty wrapper reset')
         self.last_gripper_state = None
         obs, info = super().reset(**kwargs)
         info["gripper_penalty"] = 0.0
@@ -1056,6 +1084,7 @@ class GripperActionWrapper(gym.ActionWrapper):
         Returns:
             The initial observation and info.
         """
+        print('Called gripper action wrapper reset')
         obs, info = super().reset(**kwargs)
         self.last_gripper_action_time = 0.0
         self.last_gripper_action = None
@@ -1369,6 +1398,7 @@ class BaseLeaderControlWrapper(gym.Wrapper):
         Returns:
             The initial observation and info.
         """
+        print('base leader control wrapper reset')
         self.keyboard_events = dict.fromkeys(self.keyboard_events, False)
         self.leader_tracking_error_queue.clear()
         return super().reset(**kwargs)
@@ -1656,7 +1686,10 @@ class GamepadControlWrapper(gym.Wrapper):
         obs, reward, terminated, truncated, info = self.env.step(action)
 
         # Add episode ending if requested via gamepad
-        terminated = terminated or truncated or terminate_episode
+        # terminated = terminated or truncated or terminate_episode
+        terminated = terminated or terminate_episode
+        if terminated:
+            print('Terminated: {} {} {}'.format(terminated, truncated, terminate_episode))
 
         if success:
             reward = 1.0
@@ -1800,6 +1833,7 @@ class GymHilDeviceWrapper(gym.Wrapper):
         return obs, reward, terminated, truncated, info
 
     def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None):
+        print('Called gym hil device wrapper reset')
         obs, info = self.env.reset(seed=seed, options=options)
         for k in obs:
             obs[k] = obs[k].to(self.device)
@@ -1952,6 +1986,7 @@ def make_robot_env(cfg: EnvConfig) -> gym.Env:
     else:
         raise ValueError(f"Invalid control mode: {control_mode}")
 
+    print('Creating ResetWrapper with reset_time_s', cfg.wrapper.reset_time_s)
     env = ResetWrapper(
         env=env,
         reset_pose=cfg.wrapper.fixed_reset_joint_positions,
@@ -2247,7 +2282,17 @@ def main(cfg: EnvConfig):
 
         # Execute the step: wrap the NumPy action in a torch tensor.
         obs, reward, terminated, truncated, info = env.step(smoothed_action)
+        # if terminated or truncated:
+        #     if truncated:
+        #         print('Truncated!')
+        #     if terminated:
+        #         print('Terminated')
+        #     terminated = False
+        #     truncated = False
+        #     # print('Manually set both terminated and truncated to false to prove that this solves my problem')
         if terminated or truncated:
+            print('gym_manipulator.main terminated {} truncated {}'.format(terminated, truncated))
+            print('gym_manipulator.main info', info)
             successes.append(reward)
             env.reset()
             num_episode += 1
