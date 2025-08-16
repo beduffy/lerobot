@@ -198,6 +198,8 @@ python -m lerobot.scripts.eval \
 
 WITH t4 updt_s:0.263 = 0.263 x 200 = 52.6 per 200 steps
 With ag10 18.0.092 x 200 = 18.4s per 200 steps
+20000 x 0.092 = 1840 seconds = 0.51 hours = 30 minutes
+60000 x 0.092 = 5520 seconds = 1.53 hours = 1 hour 32 minutes
 
 smol vla updt_s:0.793 x 200 = 158.6 per 200 steps
 
@@ -530,6 +532,7 @@ python lerobot/scripts/train.py \
   --wandb.enable=true \
   --dataset.video_backend=pyav
 
+# upload model to huggingface
 huggingface-cli upload ${HF_USER}/${task_name} outputs/train/${task_name}_${run_count}/checkpoints/last/pretrained_model --repo-type=model
 
 # evaluate on laptop
@@ -569,3 +572,113 @@ python lerobot/scripts/visualize_dataset_html.py \
 python lerobot/scripts/visualize_dataset_html.py \
   --repo-id=${HF_USER}/pile_of_socks_into_red_hamper \
   --episodes 0 2 4
+
+
+
+
+########################################################
+# August 16th 2025, 
+########################################################
+
+# run in both laptop and in cloud
+task_name="pick_place_one_white_sock_black_out_blinds"
+huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
+HF_USER=$(huggingface-cli whoami | head -n 1)
+echo $HF_USER
+
+
+# TODO save calibration to repo?
+# TODO stop having so many repos.
+
+
+python -m lerobot.teleoperate \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm \
+    --display_data=true
+
+python -m lerobot.record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm \
+    --display_data=true \
+    --dataset.repo_id=${HF_USER}/${task_name} \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="Grab white sock and place into your box"
+
+# resuming
+python -m lerobot.record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm \
+    --display_data=true \
+    --resume=true \
+    --dataset.repo_id=${HF_USER}/${task_name} \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="Grab white sock and place into your box"
+
+python lerobot/scripts/visualize_dataset_html.py \
+  --repo-id=${HF_USER}/${task_name}
+
+# train
+task_name="pick_place_one_white_sock_black_out_blinds"
+huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
+HF_USER=$(huggingface-cli whoami | head -n 1)
+echo $HF_USER
+
+run_count=1
+python lerobot/scripts/train.py \
+  --dataset.repo_id=bearlover365/${task_name} \
+  --policy.type=act \
+  --output_dir=outputs/train/${task_name}_${run_count} \
+  --job_name=${task_name} \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --save_freq=10000 \
+  --dataset.video_backend=pyav
+
+# upload model to huggingface, new terminal run hugging cli login again
+task_name="pick_place_one_white_sock_black_out_blinds"
+huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
+HF_USER=$(huggingface-cli whoami | head -n 1)
+echo $HF_USER
+run_count=1
+#huggingface-cli upload ${HF_USER}/${task_name} outputs/train/${task_name}_${run_count}/checkpoints/last/pretrained_model --repo-type=model
+huggingface-cli upload ${HF_USER}/${task_name} outputs/train/${task_name}_${run_count}/checkpoints/020000/pretrained_model --repo-type=model
+
+
+# evaluate on laptop
+python -m lerobot.record \
+  --robot.type=so101_follower \
+  --robot.port=/dev/ttyACM0 \
+  --robot.id=my_awesome_follower_arm \
+  --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+  --policy.path=${HF_USER}/${task_name} \
+  --dataset.repo_id=${HF_USER}/eval_${task_name} \
+  --dataset.single_task="Grab white sock and place into your box" \
+  --dataset.num_episodes=1 \
+  --display_data=true
+
+  updt_s:0.265 with training above on T4
+  200 x 0.265 = 53 seconds
+  20000 x 0.265 = 5300 seconds = 1.47 hours
+  14000 x 0.265 = 3710 seconds = 1.03 hours = 1 hour 4 minutes
+  60000 x 0.265 = 15900 seconds = 4.42 hours = 4 hours 25 minutes
+
+Above I mentioned on previous run
+ag10 0.092 x 200 = 18.4s per 200 steps
+60000 x 0.092 = 5520 seconds = 1.53 hours = 1 hour 32 minutes = almost three times faster
+
+  # TODO try l4go gpu instead of t4
