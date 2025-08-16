@@ -11,30 +11,32 @@ WARMUP=400
 DECAY_STEPS=7000
 PEAK_LR="$LR"
 DECAY_LR=1e-6
+DATASET_REPO_ID="bearlover365/${TASK}"
 
 # ---- Derived ----
 REPO="$HOME/lerobot"
-SCRIPT="$REPO/lerobot/scripts/train.py"
+# SCRIPT="$REPO/lerobot/scripts/train.py"
+SCRIPT="$REPO/src/lerobot/scripts/train.py"
 RUN_DIR="$REPO/outputs/train/${TASK}_${RUN_TAG}"
-CFG_BASE="$REPO/outputs/train/${TASK}_1/train_config.json"
 
 # ---- Sanity ----
 [ -f "$SCRIPT" ] || { echo "Missing $SCRIPT"; exit 1; }
-[ -f "$CFG_BASE" ] || { echo "Missing base config $CFG_BASE"; exit 1; }
-mkdir -p "$RUN_DIR"
 
 # ---- W&B (new run) ----
-export WANDB_DIR="$RUN_DIR/wandb"; mkdir -p "$WANDB_DIR"
+export WANDB_DIR="$RUN_DIR/wandb"
 
 cd "$REPO"
 PYTHONUNBUFFERED=1 python "$SCRIPT" \
-  --config_path="$CFG_BASE" \
   --resume=false \
   --output_dir="$RUN_DIR" \
   --job_name="${TASK}_${RUN_TAG}" \
   --wandb.enable=true \
   --wandb.project="lerobot" \
   --wandb.entity="benfduffy-bearcover-gmbh" \
+  --dataset.repo_id="$DATASET_REPO_ID" \
+  --policy.type=act \
+  --policy.push_to_hub=false \
+  --use_policy_training_preset=false \
   --policy.device=cuda \
   --policy.use_amp=true \
   --num_workers=8 \
@@ -49,5 +51,6 @@ PYTHONUNBUFFERED=1 python "$SCRIPT" \
   --scheduler.decay_lr="$DECAY_LR" \
   --save_freq=10000 \
   --dataset.video_backend=pyav
+
 
 
