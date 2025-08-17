@@ -576,7 +576,7 @@ python lerobot/scripts/visualize_dataset_html.py \
 
 
 ########################################################
-# August 16th 2025, 
+# August 16th 2025, beginnings of mobile manipulation, but starting static
 ########################################################
 
 # run in both laptop and in cloud
@@ -674,14 +674,31 @@ python -m lerobot.record \
   --dataset.repo_id=${HF_USER}/eval_${task_name} \
   --dataset.single_task="Grab white sock and place into your box" \
   --dataset.num_episodes=1 \
+  --resume true \
   --display_data=true
 
-  updt_s:0.265 with training above on T4
-  200 x 0.265 = 53 seconds
-  20000 x 0.265 = 5300 seconds = 1.47 hours
-  14000 x 0.265 = 3710 seconds = 1.03 hours = 1 hour 4 minutes
-  60000 x 0.265 = 15900 seconds = 4.42 hours = 4 hours 25 minutes
-  150000 x 0.265 = 39750 seconds = 11.04 hours = 11 hours 3 minutes
+# evaluate specific step number mode name on laptop white sock resume last
+saved_model_step_number=130000
+task_name="pick_place_one_white_sock_black_out_blinds"
+HF_USER=bearlover365
+python -m lerobot.record \
+  --robot.type=so101_follower \
+  --robot.port=/dev/ttyACM0 \
+  --robot.id=my_awesome_follower_arm \
+  --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+  --policy.path=${HF_USER}/${task_name}_${saved_model_step_number} \
+  --dataset.repo_id=${HF_USER}/eval_${task_name} \
+  --dataset.single_task="Grab white sock and place into your box" \
+  --dataset.num_episodes=1 \
+  --resume true
+  --display_data=true
+
+updt_s:0.265 with training above on T4
+200 x 0.265 = 53 seconds
+20000 x 0.265 = 5300 seconds = 1.47 hours
+14000 x 0.265 = 3710 seconds = 1.03 hours = 1 hour 4 minutes
+60000 x 0.265 = 15900 seconds = 4.42 hours = 4 hours 25 minutes
+150000 x 0.265 = 39750 seconds = 11.04 hours = 11 hours 3 minutes
 
 Above I mentioned on previous run
 ag10 0.092 x 200 = 18.4s per 200 steps
@@ -695,6 +712,15 @@ updt_s:0.051
 60000 x 0.051 = 3060 seconds = 0.85 hours = 51 minutes
 150000 x 0.051 = 7650 seconds = 2.12 hours = 2 hours 7 minutes
 
+# imaginary l40s 3x faster with 224 resolution
+0.051 / 3 = 0.017
+200 x 0.017 = 3.4 seconds
+20000 x 0.017 = 340 seconds = 0.09 hours = 5 minutes
+14000 x 0.017 = 238 seconds = 0.06 hours = 4 minutes
+60000 x 0.017 = 1020 seconds = 0.28 hours = 17 minutes
+150000 x 0.017 = 2550 seconds = 0.71 hours = 43 minutes
+
+
 # cpu
 INFO 2025-08-16 20:30:44 ts/train.py:232 step:200 smpl:2K ep:2 epch:0.04 loss:6.910 grdn:159.099 lr:1.0e-05 updt_s:7.643 data_s:0.014
 updt_s:7.643
@@ -703,7 +729,10 @@ updt_s:7.643 x 20000 = 152860 seconds = 42.46 hours = 42 hours 28 minutes
 updt_s:7.643 x 60000 = 458580 seconds = 127.38 hours = 127 hours 23 minutes
 
 
-  # TODO try l4go gpu instead of t4
+# later cpu but image resolution act 224x224 bash script.
+INFO 2025-08-17 12:16:25 ts/train.py:232 step:10 smpl:80 ep:0 epch:0.00 loss:41.915 grdn:639.243 lr:1.0e-05 updt_s:63.137 data_s:0.092
+ahh something was wrong there, think it was 2.2s/step... 
+
 
 # new train
 python lerobot/scripts/train.py \
@@ -970,4 +999,34 @@ The current active token is: `first`
 
 
 
-# 
+# ###### batch jobs commands and shit 
+lightning list jobs --teamspace benfduffy/rl-il-vision-nlp-hacking
+
+lightning inspect job --name act-224x224-s1k --teamspace benfduffy/rl-il-vision-nlp-hacking
+
+lightning run job \
+  --teamspace benfduffy/rl-il-vision-nlp-hacking \
+  --studio only_lerobot \
+  --machine L40S \
+  --name act-224x224- \
+  --command "STEPS=1000 LOG_FREQ=10 BATCH=64 bash /teamspace/studios/this_studio/lerobot/jobs/run_act_224.sh"
+
+
+# all install commands on new machine 
+
+copy studiorc
+
+pip install -U "huggingface_hub[cli]"
+git clone https://github.com/beduffy/lerobot
+cd lerobot
+hf auth whoami
+python lerobot/scripts/train.py \\n  --dataset.repo_id=bearlover365/${task_name} \\n  --policy.type=act \\n  --output_dir=outputs/train/${task_name}_testesttest_numpy_less_than_2 \\n  --job_name=${task_name} \\n  --policy.device=cuda \\n  --wandb.enable=true \\n  --dataset.video_backend=pyav
+hf auth login
+hf auth whoami
+huggingface-cli login --token "$HUGGINGFACE_TOKEN" --add-to-git-credential || true
+wandb login --relogin "$WANDB_API_KEY" || true
+conda install ffmpeg -c conda-forge
+pip install -e .
+wandb login
+pip install wandb
+wandb login
