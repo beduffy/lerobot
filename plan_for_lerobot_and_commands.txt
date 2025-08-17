@@ -198,6 +198,8 @@ python -m lerobot.scripts.eval \
 
 WITH t4 updt_s:0.263 = 0.263 x 200 = 52.6 per 200 steps
 With ag10 18.0.092 x 200 = 18.4s per 200 steps
+20000 x 0.092 = 1840 seconds = 0.51 hours = 30 minutes
+60000 x 0.092 = 5520 seconds = 1.53 hours = 1 hour 32 minutes
 
 smol vla updt_s:0.793 x 200 = 158.6 per 200 steps
 
@@ -250,7 +252,6 @@ python -m lerobot.record \
 # between episodes to reload model
 /home/ben/.cache/huggingface/lerobot/bearlover365/eval_pick_up_black_and_white_sock_into_red_box
 
-huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
 
 HF_USER=$(huggingface-cli whoami | head -n 1)
 echo $HF_USER
@@ -530,6 +531,7 @@ python lerobot/scripts/train.py \
   --wandb.enable=true \
   --dataset.video_backend=pyav
 
+# upload model to huggingface
 huggingface-cli upload ${HF_USER}/${task_name} outputs/train/${task_name}_${run_count}/checkpoints/last/pretrained_model --repo-type=model
 
 # evaluate on laptop
@@ -569,3 +571,400 @@ python lerobot/scripts/visualize_dataset_html.py \
 python lerobot/scripts/visualize_dataset_html.py \
   --repo-id=${HF_USER}/pile_of_socks_into_red_hamper \
   --episodes 0 2 4
+
+
+
+
+########################################################
+# August 16th 2025, 
+########################################################
+
+# run in both laptop and in cloud
+task_name="pick_place_one_white_sock_black_out_blinds"
+huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
+HF_USER=$(huggingface-cli whoami | head -n 1)
+echo $HF_USER
+
+
+# TODO save calibration to repo?
+# TODO stop having so many repos.
+
+
+python -m lerobot.teleoperate \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm \
+    --display_data=true
+
+python -m lerobot.record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm \
+    --display_data=true \
+    --dataset.repo_id=${HF_USER}/${task_name} \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="Grab white sock and place into your box"
+
+# resuming
+python -m lerobot.record \
+    --robot.type=so101_follower \
+    --robot.port=/dev/ttyACM0 \
+    --robot.id=my_awesome_follower_arm \
+    --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+    --teleop.type=so101_leader \
+    --teleop.port=/dev/ttyACM1 \
+    --teleop.id=my_awesome_leader_arm \
+    --display_data=true \
+    --resume=true \
+    --dataset.repo_id=${HF_USER}/${task_name} \
+    --dataset.num_episodes=50 \
+    --dataset.single_task="Grab white sock and place into your box"
+
+python lerobot/scripts/visualize_dataset_html.py \
+  --repo-id=${HF_USER}/${task_name}
+
+# train
+task_name="pick_place_one_white_sock_black_out_blinds"
+huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
+HF_USER=$(huggingface-cli whoami | head -n 1)
+echo $HF_USER
+
+run_count=1
+python lerobot/scripts/train.py \
+  --dataset.repo_id=bearlover365/${task_name} \
+  --policy.type=act \
+  --output_dir=outputs/train/${task_name}_${run_count} \
+  --job_name=${task_name} \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --save_freq=10000 \
+  --dataset.video_backend=pyav
+
+# upload model to huggingface, new terminal run hugging cli login again
+task_name="pick_place_one_white_sock_black_out_blinds"
+huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
+HF_USER=$(huggingface-cli whoami | head -n 1)
+echo $HF_USER
+run_count=1
+#huggingface-cli upload ${HF_USER}/${task_name} outputs/train/${task_name}_${run_count}/checkpoints/last/pretrained_model --repo-type=model
+
+# 20000
+huggingface-cli upload ${HF_USER}/${task_name} outputs/train/${task_name}_${run_count}/checkpoints/020000/pretrained_model --repo-type=model
+huggingface-cli upload ${HF_USER}/${task_name} outputs/train/${task_name}_${run_count}/checkpoints/060000/pretrained_model --repo-type=model
+
+
+# evaluate on laptop white sock resume last
+python -m lerobot.record \
+  --robot.type=so101_follower \
+  --robot.port=/dev/ttyACM0 \
+  --robot.id=my_awesome_follower_arm \
+  --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+  --policy.path=${HF_USER}/${task_name} \
+  --dataset.repo_id=${HF_USER}/eval_${task_name} \
+  --dataset.single_task="Grab white sock and place into your box" \
+  --dataset.num_episodes=1 \
+  --display_data=true
+
+  updt_s:0.265 with training above on T4
+  200 x 0.265 = 53 seconds
+  20000 x 0.265 = 5300 seconds = 1.47 hours
+  14000 x 0.265 = 3710 seconds = 1.03 hours = 1 hour 4 minutes
+  60000 x 0.265 = 15900 seconds = 4.42 hours = 4 hours 25 minutes
+  150000 x 0.265 = 39750 seconds = 11.04 hours = 11 hours 3 minutes
+
+Above I mentioned on previous run
+ag10 0.092 x 200 = 18.4s per 200 steps
+60000 x 0.092 = 5520 seconds = 1.53 hours = 1 hour 32 minutes = almost three times faster
+
+# l40s!!!! 
+updt_s:0.051
+200 x 0.051 = 10.2 seconds
+20000 x 0.051 = 1020 seconds = 0.28 hours = 17 minutes
+14000 x 0.051 = 714 seconds = 0.2 hours = 12 minutes
+60000 x 0.051 = 3060 seconds = 0.85 hours = 51 minutes
+150000 x 0.051 = 7650 seconds = 2.12 hours = 2 hours 7 minutes
+
+# cpu
+INFO 2025-08-16 20:30:44 ts/train.py:232 step:200 smpl:2K ep:2 epch:0.04 loss:6.910 grdn:159.099 lr:1.0e-05 updt_s:7.643 data_s:0.014
+updt_s:7.643
+updt_s:7.643 x 200 = 1528.6 per 200 steps
+updt_s:7.643 x 20000 = 152860 seconds = 42.46 hours = 42 hours 28 minutes
+updt_s:7.643 x 60000 = 458580 seconds = 127.38 hours = 127 hours 23 minutes
+
+
+  # TODO try l4go gpu instead of t4
+
+# new train
+python lerobot/scripts/train.py \
+  --dataset.repo_id=bearlover365/${task_name} \
+  --policy.type=act \
+  --output_dir=outputs/train/${task_name}_${run_count} \
+  --job_name=${task_name} \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --save_freq=10000 \
+  --dataset.video_backend=pyav
+
+
+# TODO learn batch jobs and just run 4 separate jobs parallel and GPU on each one. L40s
+
+program: lerobot/scripts/train.py
+method: grid
+metric:
+  name: train/loss
+  goal: minimize
+parameters:
+  batch_size:
+    values: [8, 16, 32, 64, 128]
+  steps:
+    values: [60000, 30000, 15000, 7500, 3750]
+  optimizer_type:
+    values: ["adamw"]
+  lr:
+    values: [1.0e-5, 2.0e-5, 4.0e-5, 8.0e-5, 1.6e-4]
+  warmup_steps:
+    values: [1000, 800, 600, 400, 300]  # ~5–15% of steps
+  decay_steps:
+    values: [59000, 29200, 14400, 7000, 3400]
+command:
+  - ${env}
+  - ${interpreter}
+  - ${program}
+  - --dataset.repo_id=${HF_USER}/${task_name}
+  - --policy.type=act
+  - --policy.device=cuda
+  - --policy.use_amp=true
+  - --dataset.video_backend=pyav
+  - --num_workers=8
+  - --batch_size=${batch_size}
+  - --steps=${steps}
+  - --optimizer.type=${optimizer_type}
+  - --optimizer.lr=${lr}
+  - --scheduler.type=cosine_decay_with_warmup
+  - --scheduler.num_warmup_steps=${warmup_steps}
+  - --scheduler.num_decay_steps=${decay_steps}
+  - --scheduler.peak_lr=${lr}
+  - --scheduler.decay_lr=1e-6
+  - --save_checkpoint=true
+  - --save_freq=10000
+  - --wandb.enable=true
+
+
+wandb sweep sweep.yaml        # returns SWEEP_ID
+wandb agent SWEEP_ID          # run agents (repeat to run more in parallel)
+
+https://docs.wandb.ai/guides/sweeps/define-sweep-configuration/?utm_source=chatgpt.com
+https://lightning.ai/docs/overview/scale-with-batch-jobs/CLI?utm_source=chatgpt.com
+
+
+
+from lightning docs WOOOOOOW
+# Install the Lightning SDK
+# pip install -U lightning-sdk
+
+# login to the platform
+# export LIGHTNING_USER_ID=171476ec-0416-428a-9ea4-50eb98c0bd4b
+# export LIGHTNING_API_KEY=235018dd-badd-47c7-8d1b-e8bbc0270821
+
+from lightning_sdk import Machine, Studio, Job
+
+# Start the studio
+s = Studio(name="mega-rl-experiments", teamspace="rl-il-vision-nlp-hacking", user="benfduffy")
+print("starting Studio...")
+s.start()
+
+# --------------------------
+# Example 1: Submit a job
+# --------------------------
+job = Job.run(name="my_first_job", command="python main.py", machine=Machine.A10G)
+
+# --------------------------
+# Example 2: Hyperparameter sweep
+# --------------------------
+learning_rates = ['0.01', '0.02', '0.03']
+for lr in learning_rates:
+    job_cmd = f"python main.py --lr {lr}"
+    Job.run(command=job_cmd, name="my-sweep-1", machine=Machine.A10G)
+
+# --------------------------
+# Example 3: Benchmark model on different GPUs
+# --------------------------
+machines = [Machine.A10G, Machine.L40S, Machine.A100_X_8]
+for machine in machines:
+    job_cmd = "python main.py"
+    Job.run(command=job_cmd, name="my-benchmark-1", machine=machine)
+
+print("Stopping Studio")
+s.stop()
+
+
+# Todo ONE DAY LEARN DATA CONNECTIONS S3 IN LIGHTNING. to save space. and make jobs start faster?
+
+##### actual batch job for resume needs to be #############
+
+cd lerobot
+task_name="pick_place_one_white_sock_black_out_blinds"
+run_count=1
+python lerobot/scripts/train.py \
+  --dataset.repo_id=bearlover365/${task_name} \
+  --policy.type=act \
+  --output_dir=outputs/train/${task_name}_${run_count} \
+  --job_name=${task_name}_resume \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --save_freq=10000 \
+  --dataset.video_backend=pyav \
+  --resume true
+
+#### 
+task_name="pick_place_one_white_sock_black_out_blinds"
+run_count=1
+python lerobot/scripts/train.py \
+  --dataset.repo_id=bearlover365/${task_name} \
+  --policy.type=act \
+  --policy.device=cuda \
+  --policy.use_amp=true \
+  --output_dir=outputs/train/${task_name}_l40s_b64 \
+  --job_name=${task_name}_l40s_b64 \
+  --wandb.enable=true \
+  --dataset.video_backend=pyav \
+  --num_workers=8 \
+  --batch_size=64 \
+  --steps=7500 \
+  --optimizer.type=adamw \
+  --optimizer.lr=8e-5 \
+  --scheduler.type=cosine_decay_with_warmup \
+  --scheduler.num_warmup_steps=400 \
+  --scheduler.num_decay_steps=7000 \
+  --scheduler.peak_lr=8e-5 \
+  --scheduler.decay_lr=1e-6 \
+  --save_freq=10000
+
+
+
+echo "Done"
+
+
+
+
+
+
+
+bash -lc '
+set -euo pipefail
+export task_name="pick_place_one_white_sock_black_out_blinds"
+export run_count=1
+
+# Logins (use secrets you stored in Studio settings)
+huggingface-cli login --token "$HUGGINGFACE_TOKEN" --add-to-git-credential || true
+wandb login --relogin "$WANDB_API_KEY" || true
+
+# (Optional) If resuming on a fresh machine with no outputs yet, pull last run dir from HF model repo:
+# huggingface-cli download ${HF_USER}/${task_name}-runs --repo-type=model \
+#   --local-dir "outputs/train/${task_name}_${run_count}" || true
+
+python lerobot/scripts/train.py \
+  --dataset.repo_id=bearlover365/${task_name} \
+  --policy.type=act \
+  --output_dir=outputs/train/${task_name}_${run_count} \
+  --job_name=${task_name}_resume \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --save_freq=10000 \
+  --dataset.video_backend=pyav \
+  --resume true \
+  --config_path "outputs/train/${task_name}_${run_count}/train_config.json"
+
+echo "Done"
+'
+
+
+
+# new machine cpu
+
+--policy.repo_id=${HF_USER}/${task_name}_act_resnet18
+
+run_count=1
+task_name="pick_place_one_white_sock_black_out_blinds"
+python src/lerobot/scripts/train.py \                                             
+  --dataset.repo_id=bearlover365/${task_name} \
+  --policy.type=act \
+  --policy.repo_id=${HF_USER}/${task_name}_${run_count}_act_model \
+  --output_dir=outputs/train/${task_name}_testesttest_numpy_less_than_2 \
+  --job_name=${task_name} \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --dataset.video_backend=pyav
+
+
+
+
+run_count=1
+task_name="pick_place_one_white_sock_black_out_blinds"
+python src/lerobot/scripts/train.py \                                             
+  --dataset.repo_id=bearlover365/${task_name} \
+  --policy.type=act \
+  --policy.repo_id=bearlover365/${task_name}_${run_count}_act_model \
+  --output_dir=outputs/train/${task_name}_testesttest_numpy_less_than_2 \
+  --job_name=${task_name} \
+  --policy.device=cuda \
+  --wandb.enable=true \
+  --dataset.video_backend=pyav
+
+
+
+export HF_USER="bearlover365"                    # your HF handle
+export task_name="pick_place_one_white_sock_black_out_blinds"
+export run_count=1
+export OUT="outputs/train/${task_name}_run${run_count}_numpylt2"
+export MODEL_REPO="${HF_USER}/${task_name}_${run_count}_act_model"
+python -m lerobot.scripts.train \
+  --dataset.repo_id="bearlover365/${task_name}" \
+  --policy.type=act \
+  --policy.repo_id=${MODEL_REPO} \
+  --output_dir="${OUT}" \
+  --job_name="${task_name}" \
+  --policy.device=cuda \
+  --policy.push_to_hub=false \
+  --wandb.enable=true \
+  --dataset.video_backend=pyav
+
+
+
+
+########################################################
+#  SSH INTO BATCH JOB TO UPLOAD CHECKPOINT
+########################################################
+
+⚡ ~ task_name="pick_place_one_white_sock_black_out_blinds"
+⚡ ~ huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
+
+usage: huggingface-cli <command> [<args>] login [-h] [--token TOKEN] [--add-to-git-credential]
+huggingface-cli <command> [<args>] login: error: argument --token: expected one argument
+⚡ ~ HF_USER=$(huggingface-cli whoami | head -n 1)
+⚡ ~ echo $HF_USER
+bearlover365
+⚡ ~ run_count=1
+⚡ ~ ssource .lightning_studio/.studiorc                                                
+⚡ ~ export HUGGINGFACE_TOKEN="...."
+⚡ ~ huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
+Token is valid (permission: fineGrained).
+The token `first` has been saved to /teamspace/studios/this_studio/.cache/huggingface/stored_tokens
+Your token has been saved in your configured git credential helpers (store).
+Your token has been saved to /teamspace/studios/this_studio/.cache/huggingface/token
+Login successful.
+The current active token is: `first`
+
+
+
+
+
+# 
