@@ -6,7 +6,7 @@ for kv in "$@"; do
   case "$kv" in
     *=*) export "$kv" ;;
   esac
-done
+done 
 
 # ---- YOU EDIT (env vars override these) ----
 # TASK="${TASK:-pick_place_one_white_sock_black_out_blinds}"
@@ -22,6 +22,11 @@ LOG_FREQ="${LOG_FREQ:-200}"
 POLICY_DEVICE="${POLICY_DEVICE:-cuda}"
 SAVE_CHECKPOINT="${SAVE_CHECKPOINT:-true}"
 SAVE_FREQ="${SAVE_FREQ:-25000}"
+# Hub push parameters (optional)
+PUSH_TO_HUB="${PUSH_TO_HUB:-true}"
+POLICY_REPO_ID="${POLICY_REPO_ID:-bearlover365/d1_d2_act224_s300k_b8_ckpt25k}"
+# Optional offline validation repo (held-out set)
+VAL_REPO_ID="${VAL_REPO_ID:-}"
 REPO="/teamspace/studios/this_studio/lerobot"
 SCRIPT="$REPO/src/lerobot/scripts/train.py"
 RUN_DIR="$REPO/outputs/train/${TASK}_${RUN_TAG}"
@@ -37,6 +42,9 @@ echo "LOG_FREQ=$LOG_FREQ"
 echo "SAVE_FREQ=$SAVE_FREQ"
 echo "SAVE_CHECKPOINT=$SAVE_CHECKPOINT"
 echo "POLICY_DEVICE=$POLICY_DEVICE"
+echo "PUSH_TO_HUB=$PUSH_TO_HUB"
+echo "POLICY_REPO_ID=$POLICY_REPO_ID"
+echo "VAL_REPO_ID=$VAL_REPO_ID"
 echo "REPO=$REPO"
 echo "SCRIPT=$SCRIPT"
 echo "RUN_DIR=$RUN_DIR"
@@ -48,6 +56,10 @@ echo "RUN_DIR=$RUN_DIR"
 #   POLICY_DEVICE=cpu STEPS=1 BATCH=1 LOG_FREQ=1 SAVE_CHECKPOINT=false \
 #   RUN_TAG=smoke_ckpt25k \
 #   DATASET_REPO_ID='["bearlover365/pick_place_one_white_sock_black_out_blinds","bearlover365/pick_place_up_to_four_white_socks_black_out_blinds"]'
+
+# good run l40s from mega-rl-experiments
+# bash lerobot/jobs/run_act_224_run_on_d1_d2.sh
+
 
 # ---- Derived ----
 
@@ -73,14 +85,26 @@ export WANDB_DIR="$RUN_DIR/wandb"
 mkdir -p "$(dirname "$RUN_DIR")"
 cd "$REPO"
 
+# Build optional args
+EXTRA_ARGS=()
+if [ -n "$VAL_REPO_ID" ]; then
+  EXTRA_ARGS+=( --dataset.val_repo_id="$VAL_REPO_ID" )
+  # For a smoke test, validate each checkpoint
+  EXTRA_ARGS+=( --save_freq=1 --log_freq=1 )
+fi
+if [ -n "$POLICY_REPO_ID" ]; then
+  EXTRA_ARGS+=( --policy.repo_id="$POLICY_REPO_ID" )
+fi
+
 PYTHONUNBUFFERED=1 python "$SCRIPT" \
   --resume=false \
   --output_dir="$RUN_DIR" \
   --job_name="${TASK}_${RUN_TAG}" \
   --wandb.enable=false \
   --dataset.repo_id="$DATASET_REPO_ID" \
+  "${EXTRA_ARGS[@]}" \
   --policy.type=act \
-  --policy.push_to_hub=false \
+  --policy.push_to_hub="$PUSH_TO_HUB" \
   --policy.device="$POLICY_DEVICE" \
   --policy.use_amp=true \
   --use_policy_training_preset=true \
