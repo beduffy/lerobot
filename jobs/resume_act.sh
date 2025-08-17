@@ -11,6 +11,7 @@ SCRIPT="$REPO/lerobot/scripts/train.py"
 RUN_DIR="$REPO/outputs/train/${TASK}_${RUN}"
 CFG="$RUN_DIR/train_config.json"
 CKPT_LAST="$RUN_DIR/checkpoints/last"
+# CKPT_LAST="$RUN_DIR/checkpoints/90000"
 
 [ -f "$SCRIPT" ] || { echo "Missing $SCRIPT"; exit 1; }
 [ -d "$RUN_DIR" ] || { echo "Missing $RUN_DIR"; exit 1; }
@@ -45,4 +46,5 @@ PYTHONUNBUFFERED=1 python "$SCRIPT" \
   --wandb.project="$WB_PROJECT" \
   --wandb.entity="$WB_ENTITY" \
   --wandb.run_id="$WB_RUN_ID" \
+  --steps=130000 \
   --save_freq=10000
