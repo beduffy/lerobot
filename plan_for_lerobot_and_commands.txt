@@ -693,8 +693,44 @@ python -m lerobot.record \
   --dataset.repo_id=${HF_USER}/eval_${task_name} \
   --dataset.single_task="Grab white sock and place into your box" \
   --dataset.num_episodes=1 \
-  --resume true
+  --resume true \
   --display_data=true
+
+
+# evaluating d1 + d2 combined 75k
+saved_model_step_number=075000
+#task_name="d1_and_d2_datasets_act_224x224"
+#task_name="bearlover365/d1_d2_act224_s500k_b8_ckpt25k_075000"
+task_name="d1_d2_act224_s500k_b8_ckpt25k"
+
+#task_name="pick_place_up_to_four_white_socks_black_out_blinds"
+HF_USER=bearlover365
+python -m lerobot.record \
+  --robot.type=so101_follower \
+  --robot.port=/dev/ttyACM0 \
+  --robot.id=my_awesome_follower_arm \
+  --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+  --policy.path=${HF_USER}/${task_name}_${saved_model_step_number} \
+  --dataset.repo_id=${HF_USER}/eval_${task_name} \
+  --dataset.single_task="Grab all socks and place into your box" \
+  --dataset.num_episodes=1 \
+  --resume true \
+  --display_data=true
+
+python -m lerobot.record \
+  --robot.type=so101_follower \
+  --robot.port=/dev/ttyACM0 \
+  --robot.id=my_awesome_follower_arm \
+  --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+  --policy.path=${HF_USER}/${task_name}_${saved_model_step_number} \
+  --dataset.repo_id=${HF_USER}/eval_${task_name} \
+  --dataset.single_task="Grab all socks and place into your box" \
+  --dataset.num_episodes=1 \
+  --resume true \
+  --dataset.revision=0.2.0
+  --display_data=true
+
+# TODO make sure cpu has enough speed to implement GPU model! profile!
 
 updt_s:0.265 with training above on T4
 200 x 0.265 = 53 seconds
