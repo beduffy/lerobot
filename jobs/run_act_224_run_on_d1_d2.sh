@@ -95,10 +95,18 @@ EXTRA_ARGS=()
 if [ -n "$VAL_REPO_ID" ]; then
   EXTRA_ARGS+=( --dataset.val_repo_id="$VAL_REPO_ID" )
   # For a smoke test, validate each checkpoint
+  
+  # TODO DANGEROUS not correct. 
   EXTRA_ARGS+=( --save_freq=1 --log_freq=1 )
 fi
 if [ -n "$POLICY_REPO_ID" ]; then
   EXTRA_ARGS+=( --policy.repo_id="$POLICY_REPO_ID" )
+fi
+
+if [ "$POLICY_DEVICE" = "cuda" ]; then
+  VIDEO_BACKEND="torchcodec"
+else
+  VIDEO_BACKEND="pyav"
 fi
 
 PYTHONUNBUFFERED=1 python "$SCRIPT" \
@@ -122,12 +130,11 @@ PYTHONUNBUFFERED=1 python "$SCRIPT" \
   --eval_freq=0 \
   --save_checkpoint="$SAVE_CHECKPOINT" \
   --save_freq="$SAVE_FREQ" \
-  --dataset.video_backend=pyav \
+  --dataset.video_backend="$VIDEO_BACKEND" \
   --dataset.image_transforms.enable=true \
   --dataset.image_transforms.max_num_transforms=2 \
   --dataset.image_transforms.random_order=false \
   --dataset.image_transforms.tfs='{"crop":{"type":"CenterCrop","kwargs":{"size":[320,320]}},"resize":{"type":"Resize","kwargs":{"size":[224,224]}}}' \
   --dataset.use_imagenet_stats=true \
   |& tee -a "$(dirname "$RUN_DIR")/${TASK}_${RUN_TAG}.log"
-
 
