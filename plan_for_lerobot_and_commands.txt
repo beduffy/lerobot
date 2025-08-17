@@ -1039,7 +1039,7 @@ wandb login
 ###### dataset plan
 Datasets (10-200 demos each?): 
 1. 10-100 demos of Fixed robot facing white wall, blackout blinds, overhead light, only 1 white sock in many positions 
-2. Fixed robot facing white wall, blackout blinds, overhead light, 1-4 slightly different white socks in many positions. 
+2. Fixed robot facing white wall, blackout blinds, overhead light, 1-4 slightly different white socks in many positions. DONE recording, actually did lots of fails and retries and couldn't reach to the right. And tried looking around and picking up multiple socks too. took 75 minutes probably. 
 3. same as above but using my funky lamp which is changing colours a lot (not really a realistic scenario of normal but trains the model to focus on the correct thing?) 
 4. same as above but no flashy lights or overhead light, this time daylight with blackout blinds up. Also try different amounts of daylight for different episodes. 
 5. blackout blinds down, but many different socks, big ones small ones, many different colours and up to 10 of them. 
