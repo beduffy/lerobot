@@ -415,7 +415,9 @@ def train(cfg: TrainPipelineConfig):
                         allow_patterns=["*.safetensors", "*.json"],
                         ignore_patterns=["*.tmp", "*.log"],
                     )
-                    # TODO does it work for single datasets?
+                    # TODO does it work for single datasets? gpt5 thought it was fixed but was it?
+                    # Log the model URL of the created repo
+                    # logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created.repo_url.url}")
                     logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created.repo_url}")
                 except Exception as e:
                     logging.warning(f"Failed to push checkpoint {step} to Hugging Face Hub: {e}")
