@@ -581,6 +581,9 @@ python lerobot/scripts/visualize_dataset_html.py \
 
 # run in both laptop and in cloud
 task_name="pick_place_one_white_sock_black_out_blinds"
+task_name="pick_place_up_to_four_white_socks_black_out_blinds"
+
+
 huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
 HF_USER=$(huggingface-cli whoami | head -n 1)
 echo $HF_USER
@@ -610,8 +613,8 @@ python -m lerobot.record \
     --teleop.id=my_awesome_leader_arm \
     --display_data=true \
     --dataset.repo_id=${HF_USER}/${task_name} \
-    --dataset.num_episodes=50 \
-    --dataset.single_task="Grab white sock and place into your box"
+    --dataset.num_episodes=70 \
+    --dataset.single_task="Grab all socks and place into your box"
 
 # resuming
 python -m lerobot.record \
@@ -1030,3 +1033,147 @@ pip install -e .
 wandb login
 pip install wandb
 wandb login
+
+
+
+###### dataset plan
+Datasets (10-200 demos each?): 
+1. 10-100 demos of Fixed robot facing white wall, blackout blinds, overhead light, only 1 white sock in many positions 
+2. Fixed robot facing white wall, blackout blinds, overhead light, 1-4 slightly different white socks in many positions. 
+3. same as above but using my funky lamp which is changing colours a lot (not really a realistic scenario of normal but trains the model to focus on the correct thing?) 
+4. same as above but no flashy lights or overhead light, this time daylight with blackout blinds up. Also try different amounts of daylight for different episodes. 
+5. blackout blinds down, but many different socks, big ones small ones, many different colours and up to 10 of them. 
+6. Same as above but daylight. 
+7. Then start moving the platform to many different places in my room, with sometimes daylight and sometimes blackout blinds (or two different datasets for this?). MANY DIFFERENT POSITIONS, needs way more data, maybe 500 episodes? 
+8. Then start moving to entire apartment. Hopefully with enough training of the above, the model has learned to not really care about the background/environment and more learned what socks look like and what it looks like to have a succesful grasp. No? How much will background screw me? I want to find a way to quantify this and find tricks to need less data. Maybe I can do 1 room at a time and see how 1 extra room helps.
+
+
+
+
+
+
+
+
+
+
+###### overall plan from dataset perspective
+
+Short answer: you can do “train D1 → fine-tune on D2 → … → fine-tune on D8,” but don’t do it without replay. Pure sequential fine-tuning forgets earlier invariances and overfits to the last dataset. The most reliable recipe for max generalization is:
+
+Curriculum + replay (a.k.a. annealed co-training), then
+
+A short union fine-tune on all data, and
+
+Auto-retry at test time (confidence-gated), optionally followed by
+
+A small HIL-SERL online polish with a reward classifier.
+
+Below is a concrete, lean plan to push toward your “~99% with ≤2 retries” goal with ~1k demos instead of 2k.
+
+A. Curriculum vs co-training — what to do
+
+Do: train on D1 (get it working), fine-tune on D2 while replaying 20–30% of D1 in the batches, then move to D7/D8 with a 10–20% replay from everything before.
+
+Finish with a short union pass: 3–8 “epochs” over the entire mixture (light LR) so the policy consolidates across scenes.
+
+Don’t: sequentially fine-tune with zero replay; you’ll lose earlier robustness.
+
+Why this beats equal co-training from scratch: you get the stability of a curriculum (easier → harder) and you prevent forgetting with replay. It also needs fewer total steps than heavy simultaneous mixing.
+
+B. Data plan to hit ~99% with retries (≈1k demos)
+
+Target ~1,000 demos total, but make every demo count:
+
+D1 (clean single-sock): 15–20 (just for pipeline).
+
+D2 (1–4 white socks, same setup): 60–100.
+
+D5/D6 (multi-sock, varied colors; blinds down/up): 120–200 total.
+
+D7 (many placements in your room, day/night): 400–500.
+
+D8 (apartment-wide): the rest to 1k.
+
+Make 1k act like 2k (dataset curation)
+
+Cover placements first: ensure every corner/wall/floor/lighting mode shows up; this buys more than extra repeats in one spot.
+
+Core-set selection: embed frames with your vision backbone (or DINO), pick diverse demos via k-center / k-medoids over (placement, lighting, floor, sock-ID) bins—drop near-duplicates.
+
+Hard-negative mining: keep failures and near-misses; they teach recovery and “don’t grab air.”
+
+Balance long tail: overweight dark socks / near-wall cases / shiny floors.
+
+Augment lightly: 15–25% photometric jitter, small blur/noise; avoid heavy geometric warps on the gripper/sock. Real scene diversity > synthetic background swaps.
+
+C. Model + training knobs (ACT)
+
+Input: your wrist cam downsampled to 160×160 (or 192).
+
+Chunk length H: 50–60 at 10–20 Hz.
+
+Batch: 8–12.
+
+Schedule: cosine to ~3e-6 by the end of each stage; enable EMA.
+
+Sampler: if available, sample by attempts (grasp events), not raw frames; otherwise cap per-episode samples so long D2 episodes don’t dominate.
+
+Confidence head (simple): add a tiny MLP off the policy features to predict grasp-success probability at t+K. Use it only for runtime gating (see next).
+
+E. Optional HIL-SERL polish (fewer demos, better tails)
+
+Train a reward classifier from your recorded data (“sock in gripper/on deck”).
+
+Run 1–2 short online sessions: the robot tries; you intervene occasionally; it learns to retry because reward only comes when a sock is truly stowed.
+
+Use this after the curriculum to lift stubborn edge cases; you don’t have to re-collect lots of new demos.
+
+F. “Train one set to good, then next?” — exact schedule
+
+Here’s a concrete 3-stage schedule that’s fast and safe:
+
+Stage 1 (D1→D2):
+
+Train on D1+ D2 with D2: 80%, D1: 20% sampling, ~12–16 epochs over the mix.
+
+Eval on 3 held-out test placements.
+
+Stage 2 (add D5/D6 + D7):
+
+Fine-tune with D7: 60%, D5/D6: 25%, D2: 10%, D1: 5% for ~8–12 epochs.
+
+Add the confidence head; calibrate τ on held-out trials.
+
+Stage 3 (add D8 apartment-wide):
+
+Fine-tune with D8: 70%, replay (D7: 20%, D5/D6: 10%) for ~6–8 epochs.
+
+Union consolidation: last 3–5 epochs over all data at 1/3 LR.
+
+If you prefer pure sequential fine-tune, keep the replay tail shown above (that’s the key difference vs risky “train only on the latest”).
+
+G. When to stop / how to tell if 12 epochs are enough
+
+Use the same formula you used before: steps ≈ (epochs × num_frames) / batch.
+
+Start with ~12 epochs after each merge; if real-world success is still rising at eval checkpoints, extend to 16–20. If it stalls, don’t waste steps—move to the next stage or gather targeted data.
+
+H. RL vs IL to reach 99%
+
+IL + two-retry wrapper will often get you ~99% perceived on in-distribution rooms with ~1k good demos.
+
+HIL-SERL helps when you want that last few % on weird corners/dark socks with fewer extra demos; use it as a finisher, not a replacement for coverage.
+
+I. Quick “1k instead of 2k” checklist
+
+Prioritize placement diversity over repeats.
+
+Use core-set selection to remove near-dupes.
+
+Keep hard negatives and edge cases.
+
+Add a confidence head + two-retry wrapper.
+
+Optionally do one short HIL-SERL session at the end.
+
+If you give me the current dataset.num_frames after you add D2, I’ll spit out exact step counts for 12/16/20 epochs and a ready-to-paste sampling weight table for your next two stages.
