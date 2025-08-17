@@ -982,6 +982,8 @@ python -m lerobot.scripts.train \
 ⚡ ~ task_name="pick_place_one_white_sock_black_out_blinds"
 ⚡ ~ huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
 
+
+
 usage: huggingface-cli <command> [<args>] login [-h] [--token TOKEN] [--add-to-git-credential]
 huggingface-cli <command> [<args>] login: error: argument --token: expected one argument
 ⚡ ~ HF_USER=$(huggingface-cli whoami | head -n 1)
@@ -1014,6 +1016,7 @@ lightning run job \
   --name act-224x224- \
   --command "STEPS=1000 LOG_FREQ=10 BATCH=64 bash /teamspace/studios/this_studio/lerobot/jobs/run_act_224.sh"
 
+bash lerobot/jobs/run_act_224_run_on_d1_d2.sh
 
 # all install commands on new machine 
 
