@@ -8,7 +8,9 @@ BATCH="${BATCH:-64}"
 STEPS="${STEPS:-1000}"
 LR="${LR:-8e-5}"
 WARMUP="${WARMUP:-100}"
+# Guard: ensure non-negative decay steps
 DECAY_STEPS=$((STEPS - WARMUP))
+if [ "$DECAY_STEPS" -lt 0 ]; then DECAY_STEPS=0; fi
 PEAK_LR="${PEAK_LR:-$LR}"
 DECAY_LR="${DECAY_LR:-1e-6}"
 DATASET_REPO_ID="${DATASET_REPO_ID:-bearlover365/${TASK}}"
@@ -18,6 +20,13 @@ LOG_FREQ="${LOG_FREQ:-10}"
 REPO="/teamspace/studios/this_studio/lerobot"
 SCRIPT="$REPO/src/lerobot/scripts/train.py"
 RUN_DIR="$REPO/outputs/train/${TASK}_${RUN_TAG}"
+
+# If the run directory already exists and resume=false, avoid overwrite by appending a timestamp suffix
+if [ -d "$RUN_DIR" ]; then
+  SUFFIX=$(date +%Y%m%d_%H%M%S)
+  RUN_TAG="${RUN_TAG}_${SUFFIX}"
+  RUN_DIR="$REPO/outputs/train/${TASK}_${RUN_TAG}"
+fi
 POLICY_DEVICE="${POLICY_DEVICE:-cuda}"
 
 # ---- Sanity ----
@@ -28,8 +37,8 @@ python --version || true
 
 # ---- W&B (new run) ----
 export WANDB_DIR="$RUN_DIR/wandb"
-
-mkdir -p "$RUN_DIR"
+# Ensure parent output dir exists for logging
+mkdir -p "$(dirname "$RUN_DIR")"
 cd "$REPO"
 
 PYTHONUNBUFFERED=1 python "$SCRIPT" \
@@ -39,8 +48,10 @@ PYTHONUNBUFFERED=1 python "$SCRIPT" \
   --wandb.enable=false \
   --dataset.repo_id="$DATASET_REPO_ID" \
   --policy.type=act \
+  --policy.push_to_hub=false \
   --policy.device="$POLICY_DEVICE" \
   --policy.use_amp=true \
+  --use_policy_training_preset=false \
   --num_workers=8 \
   --batch_size="$BATCH" \
   --steps="$STEPS" \
@@ -60,6 +71,6 @@ PYTHONUNBUFFERED=1 python "$SCRIPT" \
   --dataset.image_transforms.random_order=false \
   --dataset.image_transforms.tfs='{"crop":{"type":"CenterCrop","kwargs":{"size":[320,320]}},"resize":{"type":"Resize","kwargs":{"size":[224,224]}}}' \
   --dataset.use_imagenet_stats=true \
-  |& tee -a "$RUN_DIR/train.log"
+  |& tee -a "$(dirname "$RUN_DIR")/${TASK}_${RUN_TAG}.log"
 
 

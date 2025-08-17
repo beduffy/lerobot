@@ -217,6 +217,19 @@ def make_transform_from_config(cfg: ImageTransformConfig):
         return v2.ColorJitter(**cfg.kwargs)
     elif cfg.type == "SharpnessJitter":
         return SharpnessJitter(**cfg.kwargs)
+    elif cfg.type in ("CenterCrop", "Resize"):
+        # Ensure size parameters are integers
+        kwargs = dict(cfg.kwargs) if cfg.kwargs is not None else {}
+        if "size" in kwargs:
+            size = kwargs["size"]
+            if isinstance(size, (list, tuple)):
+                kwargs["size"] = tuple(int(x) for x in size)
+            elif isinstance(size, (int, float)):
+                kwargs["size"] = int(size)
+        if cfg.type == "CenterCrop":
+            return v2.CenterCrop(**kwargs)
+        else:
+            return v2.Resize(**kwargs)
     else:
         raise ValueError(f"Transform '{cfg.type}' is not valid.")
 

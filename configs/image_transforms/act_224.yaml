@@ -1,0 +1,14 @@
+enable: true
+max_num_transforms: 2
+random_order: false
+tfs:
+  crop:
+    type: CenterCrop
+    kwargs:
+      size: [320, 320]
+  resize:
+    type: Resize
+    kwargs:
+      size: [224, 224]
+
+
