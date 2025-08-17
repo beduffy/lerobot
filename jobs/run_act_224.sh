@@ -4,7 +4,7 @@ set -euo pipefail
 # ---- YOU EDIT (env vars override these) ----
 TASK="${TASK:-pick_place_one_white_sock_black_out_blinds}"
 RUN_TAG="${RUN_TAG:-act_224x224_s1k_b64}"
-BATCH="${BATCH:-64}"
+BATCH="${BATCH:-8}"
 STEPS="${STEPS:-1000}"
 LR="${LR:-8e-5}"
 WARMUP="${WARMUP:-100}"
@@ -72,5 +72,13 @@ PYTHONUNBUFFERED=1 python "$SCRIPT" \
   --dataset.image_transforms.tfs='{"crop":{"type":"CenterCrop","kwargs":{"size":[320,320]}},"resize":{"type":"Resize","kwargs":{"size":[224,224]}}}' \
   --dataset.use_imagenet_stats=true \
   |& tee -a "$(dirname "$RUN_DIR")/${TASK}_${RUN_TAG}.log"
+
+# --- Summarize updt_s ---
+LOG_FILE="$(dirname "$RUN_DIR")/${TASK}_${RUN_TAG}.log"
+if [ -f "$LOG_FILE" ]; then
+  AVG=$(grep -o 'updt_s:[0-9]*\.[0-9]*' "$LOG_FILE" | cut -d: -f2 | awk '{s+=$1; n++} END{if(n>0) printf "%.6f", s/n; else print "nan"}')
+  LAST=$(grep -o 'updt_s:[0-9]*\.[0-9]*' "$LOG_FILE" | tail -n1 | cut -d: -f2)
+  echo "SUMMARY updt_s avg=${AVG} last=${LAST}" | tee -a "$LOG_FILE"
+fi
 
 
