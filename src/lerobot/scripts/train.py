@@ -51,6 +51,8 @@ from lerobot.utils.utils import (
     init_logging,
 )
 from lerobot.utils.wandb_utils import WandBLogger
+from huggingface_hub import HfApi
+
 
 
 def update_policy(
