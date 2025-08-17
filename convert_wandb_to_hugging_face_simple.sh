@@ -1,13 +1,15 @@
 MODEL_STEPS_NUMBER=130000
 
+# TODO last time i ran it created faulty config.json which i corrected hugging face cloud
+
 # 1) Create the HF-format folder for 
 mkdir -p /teamspace/studios/this_studio/lerobot/outputs/train/pick_place_one_white_sock_black_out_blinds_1/checkpoints/${MODEL_STEPS_NUMBER}/pretrained_model
 
-# 2) Download the 090000 weights from W&B
-wandb artifact get --type model benfduffy-bearcover-gmbh/lerobot/policy_act-dataset_bearlover365_pick_place_one_white_sock_black_out_blinds-seed_1000-${MODEL_STEPS_NUMBER}:v0 --root /teamspace/studios/this_studio/lerobot/tmp_wandb_090000
+# 2) Download the ${MODEL_STEPS_NUMBER} weights from W&B
+wandb artifact get --type model benfduffy-bearcover-gmbh/lerobot/policy_act-dataset_bearlover365_pick_place_one_white_sock_black_out_blinds-seed_1000-${MODEL_STEPS_NUMBER}:v0 --root /teamspace/studios/this_studio/lerobot/tmp_wandb_${MODEL_STEPS_NUMBER}
 
 # 3) Move weights into the HF folder
-cp /teamspace/studios/this_studio/lerobot/tmp_wandb_090000/model.safetensors \
+cp /teamspace/studios/this_studio/lerobot/tmp_wandb_${MODEL_STEPS_NUMBER}/model.safetensors \
    /teamspace/studios/this_studio/lerobot/outputs/train/pick_place_one_white_sock_black_out_blinds_1/checkpoints/${MODEL_STEPS_NUMBER}/pretrained_model/model.safetensors
 
 # 4) Add configs from your run (step-invariant)
