@@ -1016,8 +1016,7 @@ lightning run job \
   --name act-224x224- \
   --command "STEPS=1000 LOG_FREQ=10 BATCH=64 bash /teamspace/studios/this_studio/lerobot/jobs/run_act_224.sh"
 
-bash lerobot/jobs/run_act_224_run_on_d1_d2.sh
-
+bash /teamspace/studios/this_studio/lerobot/jobs/run_act_224_run_on_d1_d2.sh
 # all install commands on new machine 
 
 copy studiorc
