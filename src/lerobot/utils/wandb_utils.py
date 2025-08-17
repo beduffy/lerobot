@@ -26,17 +26,40 @@ from lerobot.configs.train import TrainPipelineConfig
 from lerobot.constants import PRETRAINED_MODEL_DIR
 
 
+def _format_dataset_tag(repo_id) -> str:
+    """Format a safe dataset tag for wandb.
+
+    - If repo_id is a list (multi-dataset), return a compact tag with count
+    - If it's a long string or contains '/', shorten to repo name and cap length
+    """
+    try:
+        if isinstance(repo_id, list):
+            return f"dataset:multi{len(repo_id)}"
+        if isinstance(repo_id, str):
+            name = repo_id.split("/")[-1]
+            if len(name) > 56:  # keep total tag length <= 64 including 'dataset:' prefix
+                name = name[:56]
+            return f"dataset:{name}"
+    except Exception:
+        pass
+    return "dataset:unknown"
+
+
 def cfg_to_group(cfg: TrainPipelineConfig, return_list: bool = False) -> list[str] | str:
-    """Return a group name for logging. Optionally returns group name as list."""
+    """Return safe group/tags for wandb. Optionally returns list of tags."""
     lst = [
         f"policy:{cfg.policy.type}",
         f"seed:{cfg.seed}",
     ]
     if cfg.dataset is not None:
-        lst.append(f"dataset:{cfg.dataset.repo_id}")
+        lst.append(_format_dataset_tag(cfg.dataset.repo_id))
     if cfg.env is not None:
         lst.append(f"env:{cfg.env.type}")
-    return lst if return_list else "-".join(lst)
+    if return_list:
+        return lst
+    group = "-".join(lst)
+    # Cap group length defensively
+    return group[:128]
 
 
 def get_wandb_run_id_from_filesystem(log_dir: Path) -> str:
