@@ -67,7 +67,7 @@ class SACPolicy(
                 if not n.startswith("encoder") or not self.shared_encoder
             ],
             "critic": self.critic_ensemble.parameters(),
-            "temperature": self.log_alpha,
+            "temperature": [self.log_alpha],
         }
         if self.config.num_discrete_actions is not None:
             optim_params["discrete_critic"] = self.discrete_critic.parameters()

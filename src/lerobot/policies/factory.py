@@ -147,7 +147,10 @@ def make_policy(
     kwargs = {}
     if ds_meta is not None:
         features = dataset_to_policy_features(ds_meta.features)
-        kwargs["dataset_stats"] = ds_meta.stats
+        # Many policies (e.g., ACT) accept numpy stats; SAC expects torch tensors via its own defaults.
+        # To avoid dtype mismatches, only pass dataset_stats for non-SAC policies.
+        if policy_cls.name != "sac":
+            kwargs["dataset_stats"] = ds_meta.stats
     else:
         if not cfg.pretrained_path:
             logging.warning(
