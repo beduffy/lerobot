@@ -1,28 +1,65 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Allow passing VAR=VALUE arguments after the script name by exporting them
+for kv in "$@"; do
+  case "$kv" in
+    *=*) export "$kv" ;;
+  esac
+done
+
 # ---- YOU EDIT (env vars override these) ----
 # TASK="${TASK:-pick_place_one_white_sock_black_out_blinds}"
-TASK="${TASK:-pick_place_one_white_sock_black_out_blinds}"
-RUN_TAG="${RUN_TAG:-act_224x224_s1k_b64}"
+TASK="${TASK:-d1_and_d2_datasets_act_224x224}"
+RUN_TAG="${RUN_TAG:-checkpoint_25k_300k_steps}"
 BATCH="${BATCH:-8}"
-STEPS="${STEPS:-1000}"
-LR="${LR:-8e-5}"
-DATASET_REPO_ID="${DATASET_REPO_ID:-bearlover365/${TASK}}"
-LOG_FREQ="${LOG_FREQ:-10}"
-
-# ---- Derived ----
+# STEPS="${STEPS:-5}"
+STEPS="${STEPS:-300000}"
+# LR="${LR:-8e-5}"  # using default. 
+# JSON list of datasets by default (D1 + D2); can be overridden via env
+DATASET_REPO_ID="${DATASET_REPO_ID:-[\"bearlover365/pick_place_one_white_sock_black_out_blinds\",\"bearlover365/pick_place_up_to_four_white_socks_black_out_blinds\"]}"
+LOG_FREQ="${LOG_FREQ:-200}"
+POLICY_DEVICE="${POLICY_DEVICE:-cuda}"
+SAVE_CHECKPOINT="${SAVE_CHECKPOINT:-true}"
+SAVE_FREQ="${SAVE_FREQ:-25000}"
 REPO="/teamspace/studios/this_studio/lerobot"
 SCRIPT="$REPO/src/lerobot/scripts/train.py"
 RUN_DIR="$REPO/outputs/train/${TASK}_${RUN_TAG}"
 
+# TODO setting of LOG_FREQ in call didn't seem to work?
+
+echo "DATASET_REPO_ID=$DATASET_REPO_ID"
+echo "TASK=$TASK"
+echo "RUN_TAG=$RUN_TAG"
+echo "BATCH=$BATCH"
+echo "STEPS=$STEPS"
+echo "LOG_FREQ=$LOG_FREQ"
+echo "SAVE_FREQ=$SAVE_FREQ"
+echo "SAVE_CHECKPOINT=$SAVE_CHECKPOINT"
+echo "POLICY_DEVICE=$POLICY_DEVICE"
+echo "REPO=$REPO"
+echo "SCRIPT=$SCRIPT"
+echo "RUN_DIR=$RUN_DIR"
+
+# bash /teamspace/studios/this_studio/lerobot/jobs/run_act_224_run_on_d1_d2.sh POLICY_DEVICE=cpu STEPS=1 RUN_TAG=act_224x224_smoke_on_d1_d2 SAVE_CHECKPOINT=false LOG_FREQ=1
+# bash /teamspace/studios/this_studio/lerobot/jobs/run_act_224_run_on_d1_d2.sh POLICY_DEVICE=cpu STEPS=5 RUN_TAG=act_224x224_smoke_on_d1_d2_t4 SAVE_CHECKPOINT=false LOG_FREQ=1
+# cpu batch 1, try
+# bash lerobot/jobs/run_act_224_run_on_d1_d2.sh \
+#   POLICY_DEVICE=cpu STEPS=1 BATCH=1 LOG_FREQ=1 SAVE_CHECKPOINT=false \
+#   RUN_TAG=smoke_ckpt25k \
+#   DATASET_REPO_ID='["bearlover365/pick_place_one_white_sock_black_out_blinds","bearlover365/pick_place_up_to_four_white_socks_black_out_blinds"]'
+
+# ---- Derived ----
+
+
 # If the run directory already exists and resume=false, avoid overwrite by appending a timestamp suffix
 if [ -d "$RUN_DIR" ]; then
+# TODO will this work or break things regardless of what value of resume is?
   SUFFIX=$(date +%Y%m%d_%H%M%S)
   RUN_TAG="${RUN_TAG}_${SUFFIX}"
   RUN_DIR="$REPO/outputs/train/${TASK}_${RUN_TAG}"
 fi
-POLICY_DEVICE="${POLICY_DEVICE:-cuda}"
+
 
 # ---- Sanity ----
 [ -f "$SCRIPT" ] || { echo "Missing $SCRIPT"; exit 1; }
@@ -52,7 +89,8 @@ PYTHONUNBUFFERED=1 python "$SCRIPT" \
   --steps="$STEPS" \
   --log_freq="$LOG_FREQ" \
   --eval_freq=0 \
-  --save_checkpoint=false \
+  --save_checkpoint="$SAVE_CHECKPOINT" \
+  --save_freq="$SAVE_FREQ" \
   --dataset.video_backend=pyav \
   --dataset.image_transforms.enable=true \
   --dataset.image_transforms.max_num_transforms=2 \
