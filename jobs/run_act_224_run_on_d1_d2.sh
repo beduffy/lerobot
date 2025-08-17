@@ -14,7 +14,7 @@ TASK="${TASK:-d1_and_d2_datasets_act_224x224}"
 RUN_TAG="${RUN_TAG:-checkpoint_25k_300k_steps}"
 BATCH="${BATCH:-8}"
 # STEPS="${STEPS:-5}"
-STEPS="${STEPS:-300000}"
+STEPS="${STEPS:-500000}"
 # LR="${LR:-8e-5}"  # using default. 
 # JSON list of datasets by default (D1 + D2); can be overridden via env
 DATASET_REPO_ID="${DATASET_REPO_ID:-[\"bearlover365/pick_place_one_white_sock_black_out_blinds\",\"bearlover365/pick_place_up_to_four_white_socks_black_out_blinds\"]}"
@@ -27,6 +27,9 @@ PUSH_TO_HUB="${PUSH_TO_HUB:-true}"
 POLICY_REPO_ID="${POLICY_REPO_ID:-bearlover365/d1_d2_act224_s300k_b8_ckpt25k}"
 # Optional offline validation repo (held-out set)
 VAL_REPO_ID="${VAL_REPO_ID:-}"
+# W&B defaults (enabled by default like other scripts)
+WB_PROJECT="${WB_PROJECT:-lerobot}"
+WB_ENTITY="${WB_ENTITY:-benfduffy-bearcover-gmbh}"
 REPO="/teamspace/studios/this_studio/lerobot"
 SCRIPT="$REPO/src/lerobot/scripts/train.py"
 RUN_DIR="$REPO/outputs/train/${TASK}_${RUN_TAG}"
@@ -45,6 +48,8 @@ echo "POLICY_DEVICE=$POLICY_DEVICE"
 echo "PUSH_TO_HUB=$PUSH_TO_HUB"
 echo "POLICY_REPO_ID=$POLICY_REPO_ID"
 echo "VAL_REPO_ID=$VAL_REPO_ID"
+echo "WB_PROJECT=$WB_PROJECT"
+echo "WB_ENTITY=$WB_ENTITY"
 echo "REPO=$REPO"
 echo "SCRIPT=$SCRIPT"
 echo "RUN_DIR=$RUN_DIR"
@@ -100,7 +105,9 @@ PYTHONUNBUFFERED=1 python "$SCRIPT" \
   --resume=false \
   --output_dir="$RUN_DIR" \
   --job_name="${TASK}_${RUN_TAG}" \
-  --wandb.enable=false \
+  --wandb.enable=true \
+  --wandb.project="$WB_PROJECT" \
+  --wandb.entity="$WB_ENTITY" \
   --dataset.repo_id="$DATASET_REPO_ID" \
   "${EXTRA_ARGS[@]}" \
   --policy.type=act \
