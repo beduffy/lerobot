@@ -1,0 +1,30 @@
+Here’s a simple, low-drama workflow that works well across many machines and keeps your fork clean while upstream moves fast.
+Golden rules
+Keep main a mirror of upstream/main. Never commit on main.
+Do all your work in feature branches off main.
+Rebase your feature branches onto the latest upstream/main when you choose (monthly/quarterly for stability).
+Prefer syncing to tags/releases if you want a stable API.
+One-time setup
+Remotes:
+Helpful git defaults:
+Keep your fork’s main mirroring upstream
+Run this whenever you want to sync (monthly is fine if you want stability):
+This avoids giant merge commits and file move conflicts.
+Work model for your changes
+Create branches from main:
+Periodically rebase your branch to pick upstream changes:
+You handle conflicts once, on your branch, not in main.
+Multiple machines checklist
+On any machine before working:
+Stability options (API changes keep breaking you)
+Use releases/tags from upstream:
+Work off stable if you want to avoid churn. Upgrade intentionally when ready.
+Or maintain a stable branch in your fork that you occasionally fast-forward to a known-good tag/commit.
+Optional conveniences
+GitHub “Sync fork” button does the main mirror step via UI.
+GH CLI:
+Small script to sync main:
+When to pull from upstream
+If you need new features/bugfixes: rebase your branch now.
+If you want stability: sync main monthly/quarterly, work on stable tags/branches, and rebase when you choose.
+This keeps your fork clean, your branches manageable, and avoids repeated “move everything to src/” style conflicts.
