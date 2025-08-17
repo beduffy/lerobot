@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+import ast
 from pprint import pformat
+from types import SimpleNamespace
 
 import torch
 
@@ -82,6 +84,22 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
         ImageTransforms(cfg.dataset.image_transforms) if cfg.dataset.image_transforms.enable else None
     )
 
+    # Coerce CLI string to list if user passed a JSON/Python-like list or comma-separated repo_ids
+    repo_id_value = cfg.dataset.repo_id
+    if isinstance(repo_id_value, str):
+        repostr = repo_id_value.strip()
+        if (repostr.startswith("[") and repostr.endswith("]")) or ("," in repostr):
+            try:
+                # Try Python literal (allows single quotes)
+                parsed = ast.literal_eval(repostr)
+                if isinstance(parsed, list) and all(isinstance(x, str) for x in parsed):
+                    cfg.dataset.repo_id = parsed
+                else:
+                    # Fallback to comma split
+                    cfg.dataset.repo_id = [s.strip().strip("'\"") for s in repostr.strip("[]").split(",") if s.strip()]
+            except Exception:
+                cfg.dataset.repo_id = [s.strip().strip("'\"") for s in repostr.strip("[]").split(",") if s.strip()]
+
     if isinstance(cfg.dataset.repo_id, str):
         ds_meta = LeRobotDatasetMetadata(
             cfg.dataset.repo_id, root=cfg.dataset.root, revision=cfg.dataset.revision
@@ -97,14 +115,25 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
             video_backend=cfg.dataset.video_backend,
         )
     else:
-        raise NotImplementedError("The MultiLeRobotDataset isn't supported for now.")
+        # Enable MultiLeRobotDataset when a list of repo_ids is provided
+        repo_ids: list[str] = cfg.dataset.repo_id  # type: ignore[assignment]
+        # For multi-dataset, compute delta timestamps from first dataset meta when policy defines them (e.g., ACT)
+        first_meta = LeRobotDatasetMetadata(repo_ids[0], root=None, revision=cfg.dataset.revision)
+        delta_timestamps = resolve_delta_timestamps(cfg.policy, first_meta)
         dataset = MultiLeRobotDataset(
-            cfg.dataset.repo_id,
-            # TODO(aliberts): add proper support for multi dataset
-            # delta_timestamps=delta_timestamps,
+            repo_ids,
+            root=cfg.dataset.root,
+            episodes=None,  # per-dataset episodes unsupported here
             image_transforms=image_transforms,
+            delta_timestamps=delta_timestamps,
+            download_videos=True,
             video_backend=cfg.dataset.video_backend,
         )
+        # Provide a lightweight meta proxy compatible with make_policy and imagenet stats injection
+        base_features = dataset._datasets[0].meta.features
+        merged_features = {k: v for k, v in base_features.items() if k not in dataset.disabled_features}
+        camera_keys = [k for k, ft in merged_features.items() if ft["dtype"] in ["image", "video"]]
+        dataset.meta = SimpleNamespace(features=merged_features, stats=dataset.stats, camera_keys=camera_keys, fps=dataset.fps)
         logging.info(
             "Multiple datasets were provided. Applied the following index mapping to the provided datasets: "
             f"{pformat(dataset.repo_id_to_index, indent=2)}"

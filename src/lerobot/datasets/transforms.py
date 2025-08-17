@@ -214,7 +214,7 @@ def make_transform_from_config(cfg: ImageTransformConfig):
     if cfg.type == "Identity":
         return v2.Identity(**cfg.kwargs)
     elif cfg.type == "ColorJitter":
-        return v2.ColorJitter(**cfg.kwargs)
+        return v2.ColorJitter(**cfg.kwargs) 
     elif cfg.type == "SharpnessJitter":
         return SharpnessJitter(**cfg.kwargs)
     elif cfg.type in ("CenterCrop", "Resize"):

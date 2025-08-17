@@ -29,10 +29,14 @@ class DatasetConfig:
     # keys common between the datasets are kept. Each dataset gets and additional transform that inserts the
     # "dataset_index" into the returned item. The index mapping is made according to the order in which the
     # datasets are provided.
-    repo_id: str
+    repo_id: str | list[str]
     # Root directory where the dataset will be stored (e.g. 'dataset/path').
     root: str | None = None
     episodes: list[int] | None = None
+    # Optional list of episodes to hold out for offline validation during training.
+    val_episodes: list[int] | None = None
+    # Optional separate dataset repo id to use for offline validation during training.
+    val_repo_id: str | None = None
     image_transforms: ImageTransformsConfig = field(default_factory=ImageTransformsConfig)
     revision: str | None = None
     use_imagenet_stats: bool = True
