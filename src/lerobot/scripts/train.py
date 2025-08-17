@@ -415,7 +415,8 @@ def train(cfg: TrainPipelineConfig):
                         allow_patterns=["*.safetensors", "*.json"],
                         ignore_patterns=["*.tmp", "*.log"],
                     )
-                    logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created.repo_url.url}")
+                    # TODO does it work for single datasets?
+                    logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created.repo_url}")
                 except Exception as e:
                     logging.warning(f"Failed to push checkpoint {step} to Hugging Face Hub: {e}")
 
