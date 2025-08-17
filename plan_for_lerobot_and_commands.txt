@@ -661,6 +661,9 @@ huggingface-cli upload ${HF_USER}/${task_name} outputs/train/${task_name}_${run_
 huggingface-cli upload ${HF_USER}/${task_name} outputs/train/${task_name}_${run_count}/checkpoints/060000/pretrained_model --repo-type=model
 
 
+# phospho lerobot dataset docs
+https://docs.phospho.ai/learn/lerobot-dataset
+
 # evaluate on laptop white sock resume last
 python -m lerobot.record \
   --robot.type=so101_follower \
