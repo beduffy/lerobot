@@ -245,6 +245,27 @@ def train(cfg: TrainPipelineConfig):
             if wandb_logger:
                 wandb_logger.log_policy(checkpoint_dir)
 
+            # Optionally push this checkpoint's pretrained weights to the Hugging Face Hub
+            if cfg.policy.push_to_hub and cfg.policy.repo_id:
+                try:
+                    step_id = get_step_identifier(step, cfg.steps)
+                    repo_id_with_step = f"{cfg.policy.repo_id}_{step_id}"
+                    api = HfApi()
+                    created = api.create_repo(repo_id=repo_id_with_step, private=cfg.policy.private, exist_ok=True)
+                    pretrained_dir = checkpoint_dir / "pretrained_model"
+                    api.upload_folder(
+                        repo_id=created.repo_id,
+                        repo_type="model",
+                        folder_path=pretrained_dir,
+                        commit_message=f"Upload checkpoint {step_id}",
+                        allow_patterns=["*.safetensors", "*.json"],
+                        ignore_patterns=["*.tmp", "*.log"],
+                    )
+                    logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created.repo_url.url}")
+                except Exception as e:
+                    logging.warning(f"Failed to push checkpoint {step} to Hugging Face Hub: {e}")
+
+
         if cfg.env and is_eval_step:
             step_id = get_step_identifier(step, cfg.steps)
             logging.info(f"Eval policy at step {step}")
