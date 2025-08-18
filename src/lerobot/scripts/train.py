@@ -279,6 +279,10 @@ def train(cfg: TrainPipelineConfig):
 
     if cfg.resume:
         step, optimizer, lr_scheduler = load_training_state(cfg.checkpoint_path, optimizer, lr_scheduler)
+    else:
+        # Allow initializing from a pretrained Hub snapshot without optimizer state
+        # by starting at an offset step for correct logging/scheduling.
+        step = int(getattr(cfg, "initial_step", 0) or 0)
 
     num_learnable_params = sum(p.numel() for p in policy.parameters() if p.requires_grad)
     num_total_params = sum(p.numel() for p in policy.parameters())
@@ -399,7 +403,7 @@ def train(cfg: TrainPipelineConfig):
                 except Exception as e:
                     logging.warning(f"Failed to plot validation trajectories: {e}")
 
-            # Optionally push this checkpoint's pretrained weights to the Hugging Face Hub
+            # Optionally push this checkpoint (weights + training_state) to the Hugging Face Hub
             if cfg.policy.push_to_hub and cfg.policy.repo_id:
                 try:
                     step_id = get_step_identifier(step, cfg.steps)
@@ -407,14 +411,27 @@ def train(cfg: TrainPipelineConfig):
                     api = HfApi()
                     created = api.create_repo(repo_id=repo_id_with_step, private=cfg.policy.private, exist_ok=True)
                     pretrained_dir = checkpoint_dir / "pretrained_model"
+                    training_state_dir = checkpoint_dir / "training_state"
+                    # Upload pretrained model (weights + config) at repo root for easy loading
                     api.upload_folder(
                         repo_id=created.repo_id,
                         repo_type="model",
                         folder_path=pretrained_dir,
-                        commit_message=f"Upload checkpoint {step_id}",
+                        commit_message=f"Upload checkpoint {step_id} pretrained_model",
                         allow_patterns=["*.safetensors", "*.json"],
                         ignore_patterns=["*.tmp", "*.log"],
                     )
+                    # Also upload training_state to enable true resume across machines
+                    if training_state_dir.exists():
+                        api.upload_folder(
+                            repo_id=created.repo_id,
+                            repo_type="model",
+                            folder_path=training_state_dir,
+                            path_in_repo="training_state",
+                            commit_message=f"Upload checkpoint {step_id} training_state",
+                            allow_patterns=["*.json", "*.safetensors"],
+                            ignore_patterns=["*.tmp", "*.log"],
+                        )
                     # TODO does it work for single datasets? gpt5 thought it was fixed but was it?
                     # Log the model URL of the created repo
                     # logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created.repo_url.url}")
