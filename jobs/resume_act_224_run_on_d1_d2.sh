@@ -9,87 +9,90 @@ for kv in "$@"; do
 done
 
 # ---- YOU EDIT (env vars override these) ----
-# Match the original run naming so RUN_DIR resolves to the same folder
+# Match the original run naming so RUN_DIR resolves predictably
 TASK="${TASK:-d1_and_d2_datasets_act_224x224}"
-RUN_TAG="${RUN_TAG:-checkpoint_25k_300k_steps}"
+RUN_TAG="${RUN_TAG:-from_hub_ckpt150k_to400k}"
 
-# Total steps to train to (target, not delta)
-STEPS="${STEPS:-400000}"
+# Additional steps to train (we initialize from 150k and train +250k => 400k total)
+STEPS="${STEPS:-250000}"
+# When not using resume=true, we set an initial step for accurate logging
+INITIAL_STEP="${INITIAL_STEP:-150000}"
 
 # Device and backend (default to CPU for a safe smoke test)
 POLICY_DEVICE="${POLICY_DEVICE:-cpu}"
 
-# Optional: resume from a specific checkpoint step; default to "last"
-CKPT_STEP="${CKPT_STEP:-}"
-
-# I/O and logging defaults
+# Dataset settings (mirror the original run script)
+DATASET_REPO_ID="${DATASET_REPO_ID:-[\"bearlover365/pick_place_one_white_sock_black_out_blinds\",\"bearlover365/pick_place_up_to_four_white_socks_black_out_blinds\"]}"
+BATCH="${BATCH:-8}"
 SAVE_FREQ="${SAVE_FREQ:-25000}"
 LOG_FREQ="${LOG_FREQ:-200}"
 SAVE_CHECKPOINT="${SAVE_CHECKPOINT:-true}"
 
-# W&B (optional resume). If WB_RUN_ID is set, we will force-resume that run
+# Hugging Face pretrained checkpoint to initialize from (150k)
+HF_PRETRAINED_REPO_ID="${HF_PRETRAINED_REPO_ID:-bearlover365/d1_d2_act224_s500k_b8_ckpt25k_150000}"
+export HF_PRETRAINED_REPO_ID
+
+# W&B (optional). If WB_RUN_ID is set, continue the same run id (not required)
 WB_PROJECT="${WB_PROJECT:-lerobot}"
 WB_ENTITY="${WB_ENTITY:-benfduffy-bearcover-gmbh}"
-WB_RUN_ID="${WB_RUN_ID:-}"
+WB_RUN_ID="${WB_RUN_ID:-6gbhi09t}"
+# WB_RUN_ID="${WB_RUN_ID:-}"
 
 # Repo paths
 REPO="/teamspace/studios/this_studio/lerobot"
 SCRIPT="$REPO/src/lerobot/scripts/train.py"
 RUN_DIR="$REPO/outputs/train/${TASK}_${RUN_TAG}"
-CFG="$RUN_DIR/train_config.json"
 
 echo "TASK=$TASK"
 echo "RUN_TAG=$RUN_TAG"
 echo "STEPS=$STEPS"
 echo "POLICY_DEVICE=$POLICY_DEVICE"
-echo "CKPT_STEP=${CKPT_STEP:-<last>}"
+echo "DATASET_REPO_ID=$DATASET_REPO_ID"
+echo "BATCH=$BATCH"
 echo "SAVE_CHECKPOINT=$SAVE_CHECKPOINT"
 echo "SAVE_FREQ=$SAVE_FREQ"
 echo "LOG_FREQ=$LOG_FREQ"
+echo "HF_PRETRAINED_REPO_ID=$HF_PRETRAINED_REPO_ID"
+echo "INITIAL_STEP=$INITIAL_STEP"
 echo "WB_PROJECT=$WB_PROJECT"
 echo "WB_ENTITY=$WB_ENTITY"
 echo "WB_RUN_ID=${WB_RUN_ID:-<none>}"
 echo "REPO=$REPO"
 echo "SCRIPT=$SCRIPT"
 echo "RUN_DIR=$RUN_DIR"
-echo "CFG=$CFG"
 
 # ---- Sanity ----
 [ -f "$SCRIPT" ] || { echo "Missing $SCRIPT"; exit 1; }
-[ -d "$RUN_DIR" ] || { echo "Missing $RUN_DIR"; exit 1; }
-[ -f "$CFG" ] || { echo "Missing $CFG"; exit 1; }
 
 echo "Conda env: ${CONDA_DEFAULT_ENV:-<none>}"
 python --version || true
 
-# Determine checkpoint directory to pull weights+state from
-if [ -n "$CKPT_STEP" ]; then
-  CKPT_DIR="$RUN_DIR/checkpoints/$CKPT_STEP"
-else
-  CKPT_DIR="$RUN_DIR/checkpoints/last"
+# If the run directory already exists and resume=false, avoid overwrite by appending a timestamp suffix
+if [ -d "$RUN_DIR" ]; then
+  SUFFIX=$(date +%Y%m%d_%H%M%S)
+  RUN_TAG="${RUN_TAG}_${SUFFIX}"
+  RUN_DIR="$REPO/outputs/train/${TASK}_${RUN_TAG}"
 fi
 
-[ -d "$CKPT_DIR" ] || { echo "Missing $CKPT_DIR"; exit 1; }
-[ -f "$CKPT_DIR/pretrained_model/model.safetensors" ] || { echo "Missing weights in $CKPT_DIR"; exit 1; }
-[ -f "$CKPT_DIR/pretrained_model/config.json" ]       || { echo "Missing config.json in $CKPT_DIR"; exit 1; }
+# Download pretrained checkpoint from the Hugging Face Hub
+echo "Downloading pretrained checkpoint from HF..."
+export HF_HOME="${HF_HOME:-$REPO/.hf_cache}"
+PRETRAINED_DIR=$(python - <<'PY'
+import os
+from huggingface_hub import snapshot_download
+repo_id = os.environ.get('HF_PRETRAINED_REPO_ID')
+path = snapshot_download(repo_id=repo_id)
+print(path)
+PY
+)
+if [ -z "$PRETRAINED_DIR" ] || [ ! -d "$PRETRAINED_DIR" ]; then
+  echo "Failed to download pretrained checkpoint from $HF_PRETRAINED_REPO_ID" && exit 1
+fi
+echo "Pretrained path: $PRETRAINED_DIR"
 
-# Link (or copy fallback) the model files into RUN_DIR for train.py discovery
-ln -sfn "$CKPT_DIR/pretrained_model/model.safetensors" "$RUN_DIR/model.safetensors" || cp -f "$CKPT_DIR/pretrained_model/model.safetensors" "$RUN_DIR/model.safetensors"
-ln -sfn "$CKPT_DIR/pretrained_model/config.json"       "$RUN_DIR/config.json"       || cp -f "$CKPT_DIR/pretrained_model/config.json"       "$RUN_DIR/config.json"
-
-# Ensure the fallback training_state path exists where train.py looks if no explicit arg is provided
-FALLBACK_TS="$REPO/outputs/train/training_state"
-mkdir -p "$FALLBACK_TS"
-for f in optimizer_param_groups.json optimizer_state.safetensors rng_state.safetensors training_step.json; do
-  if [ -f "$CKPT_DIR/training_state/$f" ]; then
-    ln -sfn "$CKPT_DIR/training_state/$f" "$FALLBACK_TS/$f" || cp -f "$CKPT_DIR/training_state/$f" "$FALLBACK_TS/$f"
-  else
-    echo "Missing $CKPT_DIR/training_state/$f" && exit 1
-  fi
-done
-
-# W&B resume if provided
-export WANDB_DIR="$RUN_DIR/wandb"
+# W&B configure
+# Keep W&B logs outside RUN_DIR to avoid creating it before train.py runs
+export WANDB_DIR="$REPO/outputs/wandb/${TASK}_${RUN_TAG}"
 mkdir -p "$WANDB_DIR"
 if [ -n "$WB_RUN_ID" ]; then
   export WANDB_RESUME=must
@@ -106,19 +109,32 @@ fi
 cd "$REPO"
 
 PYTHONUNBUFFERED=1 python "$SCRIPT" \
-  --config_path="$CFG" \
-  --resume=true \
+  --resume=false \
   --output_dir="$RUN_DIR" \
-  --policy.device="$POLICY_DEVICE" \
-  --dataset.video_backend="$VIDEO_BACKEND" \
+  --job_name="${TASK}_${RUN_TAG}" \
   --wandb.enable=true \
   --wandb.project="$WB_PROJECT" \
   --wandb.entity="$WB_ENTITY" \
   ${WB_RUN_ID:+--wandb.run_id="$WB_RUN_ID"} \
+  --dataset.repo_id="$DATASET_REPO_ID" \
+  --policy.path="$PRETRAINED_DIR" \
+  --policy.device="$POLICY_DEVICE" \
+  --policy.use_amp=true \
+  --use_policy_training_preset=true \
+  --num_workers=8 \
+  --batch_size="$BATCH" \
+  --initial_step="$INITIAL_STEP" \
   --steps="$STEPS" \
-  --save_freq="$SAVE_FREQ" \
   --log_freq="$LOG_FREQ" \
+  --eval_freq=0 \
   --save_checkpoint="$SAVE_CHECKPOINT" \
-  |& tee -a "$(dirname "$RUN_DIR")/${TASK}_${RUN_TAG}.resume.log"
+  --save_freq="$SAVE_FREQ" \
+  --dataset.video_backend="$VIDEO_BACKEND" \
+  --dataset.image_transforms.enable=true \
+  --dataset.image_transforms.max_num_transforms=2 \
+  --dataset.image_transforms.random_order=false \
+  --dataset.image_transforms.tfs='{"crop":{"type":"CenterCrop","kwargs":{"size":[320,320]}},"resize":{"type":"Resize","kwargs":{"size":[224,224]}}}' \
+  --dataset.use_imagenet_stats=true \
+  |& tee -a "$(dirname "$RUN_DIR")/${TASK}_${RUN_TAG}.log"
 
 
