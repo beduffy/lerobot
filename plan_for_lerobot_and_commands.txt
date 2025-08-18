@@ -1078,20 +1078,20 @@ lightning run job \
   --command "STEPS=1000 LOG_FREQ=10 BATCH=64 bash /teamspace/studios/this_studio/lerobot/jobs/run_act_224.sh"
 
 bash /teamspace/studios/this_studio/lerobot/jobs/run_act_224_run_on_d1_d2.sh
-# all install commands on new machine 
 
-copy studiorc
+###############
+# all install commands on new machine 
+###############################
+
+copy studiorc  # seems auto copied cool. 
 
 pip install -U "huggingface_hub[cli]"
 git clone https://github.com/beduffy/lerobot
 cd lerobot
-hf auth whoami
-python lerobot/scripts/train.py \\n  --dataset.repo_id=bearlover365/${task_name} \\n  --policy.type=act \\n  --output_dir=outputs/train/${task_name}_testesttest_numpy_less_than_2 \\n  --job_name=${task_name} \\n  --policy.device=cuda \\n  --wandb.enable=true \\n  --dataset.video_backend=pyav
-hf auth login
-hf auth whoami
 huggingface-cli login --token "$HUGGINGFACE_TOKEN" --add-to-git-credential || true
-wandb login --relogin "$WANDB_API_KEY" || true
+hf auth whoami
 conda install ffmpeg -c conda-forge
+wandb login --relogin "$WANDB_API_KEY" || true
 pip install -e .
 wandb login
 pip install wandb
