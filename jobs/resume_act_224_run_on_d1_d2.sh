@@ -18,8 +18,8 @@ STEPS="${STEPS:-250000}"
 # When not using resume=true, we set an initial step for accurate logging
 INITIAL_STEP="${INITIAL_STEP:-150000}"
 
-# Device and backend (default to CPU for a safe smoke test)
-POLICY_DEVICE="${POLICY_DEVICE:-cpu}"
+# Device and backend (default to cuda)
+POLICY_DEVICE="${POLICY_DEVICE:-cuda}"
 
 # Dataset settings (mirror the original run script)
 DATASET_REPO_ID="${DATASET_REPO_ID:-[\"bearlover365/pick_place_one_white_sock_black_out_blinds\",\"bearlover365/pick_place_up_to_four_white_socks_black_out_blinds\"]}"
@@ -99,12 +99,13 @@ if [ -n "$WB_RUN_ID" ]; then
   export WANDB_RUN_ID="$WB_RUN_ID"
 fi
 
-# Choose a suitable video backend
-if [ "$POLICY_DEVICE" = "cuda" ]; then
-  VIDEO_BACKEND="torchcodec"
-else
-  VIDEO_BACKEND="pyav"
-fi
+# # Choose a suitable video backend
+# if [ "$POLICY_DEVICE" = "cuda" ]; then
+#   VIDEO_BACKEND="torchcodec"
+# else
+#   VIDEO_BACKEND="pyav"
+# fi
+VIDEO_BACKEND="pyav"
 
 cd "$REPO"
 
