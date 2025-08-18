@@ -63,6 +63,9 @@ class TrainPipelineConfig(HubMixin):
     optimizer: OptimizerConfig | None = None
     scheduler: LRSchedulerConfig | None = None
     eval: EvalConfig = field(default_factory=EvalConfig)
+    # Optional: allow starting from an offset step without loading optimizer/scheduler state
+    # This is useful when initializing from Hub weights that don't include training_state
+    initial_step: int = 0
     wandb: WandBConfig = field(default_factory=WandBConfig)
 
     def __post_init__(self):
