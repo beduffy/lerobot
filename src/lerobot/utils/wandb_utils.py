@@ -101,11 +101,21 @@ class WandBLogger:
             if cfg.resume
             else None
         )
+        # Try to include sweep id and concise hyperparams in the run name for easier identification
+        run_name = self.job_name
+        try:
+            sid = os.environ.get("WANDB_SWEEP_ID")
+            if sid and sid[:8] not in run_name:
+                run_name = f"{run_name}_swp{sid[:8]}"
+        except Exception:
+            print('Tried to get sweep ID but not an env variable')
+            pass
+
         wandb.init(
             id=wandb_run_id,
             project=self.cfg.project,
             entity=self.cfg.entity,
-            name=self.job_name,
+            name=run_name,
             notes=self.cfg.notes,
             tags=cfg_to_group(cfg, return_list=True),
             dir=self.log_dir,
@@ -126,6 +136,12 @@ class WandBLogger:
         print(colored("Logs will be synced with wandb.", "blue", attrs=["bold"]))
         logging.info(f"Track this run --> {colored(wandb.run.get_url(), 'yellow', attrs=['bold'])}")
         self._wandb = wandb
+        # Prefer plotting x-axis in terms of samples seen rather than global step
+        try:
+            self._wandb.define_metric("train/*", step_metric="train/samples")
+            self._wandb.define_metric("eval/*", step_metric="eval/samples")
+        except Exception:
+            pass
 
     def log_policy(self, checkpoint_dir: Path):
         """Checkpoints the policy to wandb."""
