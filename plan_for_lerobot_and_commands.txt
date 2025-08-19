@@ -1085,21 +1085,19 @@ bash /teamspace/studios/this_studio/lerobot/jobs/run_act_224_run_on_d1_d2.sh
 
 copy studiorc  # seems auto copied cool. 
 
-pip install -U "huggingface_hub[cli]"
 git clone https://github.com/beduffy/lerobot
-cd lerobot
 huggingface-cli login --token "$HUGGINGFACE_TOKEN" --add-to-git-credential || true
 hf auth whoami
 conda install ffmpeg -c conda-forge
 wandb login --relogin "$WANDB_API_KEY" || true
+cd lerobot
 pip install -e .
-wandb login
-pip install wandb
-wandb login
 
 
-
+#############
 ###### dataset plan
+########################
+
 Datasets (10-200 demos each?): 
 1. 10-100 demos of Fixed robot facing white wall, blackout blinds, overhead light, only 1 white sock in many positions 
 2. Fixed robot facing white wall, blackout blinds, overhead light, 1-4 slightly different white socks in many positions. DONE recording, actually did lots of fails and retries and couldn't reach to the right. And tried looking around and picking up multiple socks too. took 75 minutes probably. 
