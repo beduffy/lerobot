@@ -191,3 +191,9 @@ class WandBLogger:
             raise ValueError(mode)
         img = self._wandb.Image(image_path, caption=caption)
         self._wandb.log({f"{mode}/image": img}, step=step)
+
+    def log_named_image(self, key: str, image_path: str, step: int, mode: str = "eval", caption: str | None = None):
+        if mode not in {"train", "eval"}:
+            raise ValueError(mode)
+        img = self._wandb.Image(image_path, caption=caption)
+        self._wandb.log({f"{mode}/{key}": img}, step=step)
