@@ -1,4 +1,4 @@
-program: /teamspace/studios/this_studio/lerobot/src/lerobot/scripts/train.py
+program: /teamspace/studios/this_studio/lerobot/jobs/train_entrypoint.py
 method: grid
 name: act_lr_bs_10k
 project: lerobot
@@ -7,8 +7,8 @@ metric:
   name: train/loss
   goal: minimize
 parameters:
-  steps:
-    value: 10000
+  target_samples:
+    value: 3200
   log_freq:
     value: 200
   eval_freq:
@@ -22,7 +22,15 @@ parameters:
   num_workers:
     value: 8
   batch_size:
-    values: [4, 8, 16, 32]
+    values: [4, 8, 16, 32, 64]
+  base_lr:
+    value: 3.0e-5
+  base_bs:
+    value: 8
+  lr_scale:
+    values: [0.5, 1.0, 2.0]
+  backbone_lr_scale:
+    values: [1.0]
   policy.type:
     value: act
   policy.use_amp:
@@ -31,10 +39,11 @@ parameters:
     value: cuda
   policy.push_to_hub:
     value: false
+  # Do NOT sweep these explicitly; entrypoint computes LRs from base_lr, batch_size, and scales
   policy.optimizer_lr:
-    values: [1.0e-5, 3.0e-5, 1.0e-4]
+    value: 0.0
   policy.optimizer_lr_backbone:
-    values: [1.0e-5, 3.0e-5, 1.0e-4]
+    value: 0.0
   dataset.repo_id:
     value: '["bearlover365/pick_place_one_white_sock_black_out_blinds","bearlover365/pick_place_up_to_four_white_socks_black_out_blinds"]'
   dataset.video_backend:
