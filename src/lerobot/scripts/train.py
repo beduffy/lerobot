@@ -369,7 +369,8 @@ def train(cfg: TrainPipelineConfig):
                 wandb_log_dict = train_tracker.to_dict()
                 if output_dict:
                     wandb_log_dict.update(output_dict)
-                wandb_logger.log_dict(wandb_log_dict, step)
+                # Log using samples as the custom step key to enable W&B x-axis as "num samples seen"
+                wandb_logger.log_dict(wandb_log_dict, custom_step_key="samples")
             train_tracker.reset_averages()
         elif is_log_step:
             logging.info(train_tracker)
@@ -377,7 +378,8 @@ def train(cfg: TrainPipelineConfig):
                 wandb_log_dict = train_tracker.to_dict()
                 if output_dict:
                     wandb_log_dict.update(output_dict)
-                wandb_logger.log_dict(wandb_log_dict, step)
+                # Log using samples as the custom step key to enable W&B x-axis as "num samples seen"
+                wandb_logger.log_dict(wandb_log_dict, custom_step_key="samples")
             train_tracker.reset_averages()
 
         if cfg.save_checkpoint and is_saving_step:
@@ -385,15 +387,16 @@ def train(cfg: TrainPipelineConfig):
             checkpoint_dir = get_step_checkpoint_dir(cfg.output_dir, cfg.steps, step)
             save_checkpoint(checkpoint_dir, step, cfg, policy, optimizer, lr_scheduler)
             update_last_checkpoint(checkpoint_dir)
-            if wandb_logger:
-                wandb_logger.log_policy(checkpoint_dir)
+            # if wandb_logger:
+                # wandb_logger.log_policy(checkpoint_dir)
 
             # Offline validation on held-out episodes
             if val_dataset is not None:
                 val_loss = _compute_offline_val_loss(policy, val_dataset, device, cfg.batch_size, cfg.num_workers)
                 logging.info(colored("Validation:", "yellow", attrs=["bold"]) + f" loss={val_loss:.6f}")
                 if wandb_logger:
-                    wandb_logger.log_dict({"val_loss": val_loss}, step)
+                    # Log validation using samples as custom step key for consistent x-axis
+                    wandb_logger.log_dict({"val_loss": val_loss, **train_tracker.to_dict(use_avg=True)}, custom_step_key="samples")
                 # Plot trajectories once per saving step
                 try:
                     png_path = cfg.output_dir / "val_plots" / f"traj_step_{get_step_identifier(step, cfg.steps)}.png"
@@ -470,7 +473,8 @@ def train(cfg: TrainPipelineConfig):
             logging.info(eval_tracker)
             if wandb_logger:
                 wandb_log_dict = {**eval_tracker.to_dict(), **eval_info}
-                wandb_logger.log_dict(wandb_log_dict, step, mode="eval")
+                # Log eval using samples as custom step key for consistent x-axis
+                wandb_logger.log_dict(wandb_log_dict, mode="eval", custom_step_key="samples")
                 wandb_logger.log_video(eval_info["video_paths"][0], step, mode="eval")
 
     if eval_env:
