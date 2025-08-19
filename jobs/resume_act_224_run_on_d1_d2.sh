@@ -11,12 +11,13 @@ done
 # ---- YOU EDIT (env vars override these) ----
 # Match the original run naming so RUN_DIR resolves predictably
 TASK="${TASK:-d1_and_d2_datasets_act_224x224}"
-RUN_TAG="${RUN_TAG:-from_hub_ckpt150k_to400k}"
+RUN_TAG="${RUN_TAG:-from_hub_ckpt250k_to400k}"
 
 # Additional steps to train (we initialize from 150k and train +250k => 400k total)
-STEPS="${STEPS:-250000}"
+STEPS="${STEPS:-400000}"
 # When not using resume=true, we set an initial step for accurate logging
-INITIAL_STEP="${INITIAL_STEP:-150000}"
+# TODO shouldn't need this
+INITIAL_STEP="${INITIAL_STEP:-250000}"
 
 # Device and backend (default to cuda)
 POLICY_DEVICE="${POLICY_DEVICE:-cuda}"
@@ -29,7 +30,8 @@ LOG_FREQ="${LOG_FREQ:-200}"
 SAVE_CHECKPOINT="${SAVE_CHECKPOINT:-true}"
 
 # Hugging Face pretrained checkpoint to initialize from (150k)
-HF_PRETRAINED_REPO_ID="${HF_PRETRAINED_REPO_ID:-bearlover365/d1_d2_act224_s500k_b8_ckpt25k_150000}"
+# HF_PRETRAINED_REPO_ID="${HF_PRETRAINED_REPO_ID:-bearlover365/d1_d2_act224_s500k_b8_ckpt25k_150000}"
+HF_PRETRAINED_REPO_ID="${HF_PRETRAINED_REPO_ID:-bearlover365/d1_d2_act224_s500k_b8_ckpt25k_250000}"
 export HF_PRETRAINED_REPO_ID
 
 # W&B (optional). If WB_RUN_ID is set, continue the same run id (not required)
