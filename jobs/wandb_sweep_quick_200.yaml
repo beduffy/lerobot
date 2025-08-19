@@ -7,8 +7,8 @@ metric:
   name: train/loss
   goal: minimize
 parameters:
-  steps:
-    value: 200
+  target_samples:
+    value: 1600
   log_freq:
     value: 50
   eval_freq:
