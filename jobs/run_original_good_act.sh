@@ -67,4 +67,4 @@ PYTHONUNBUFFERED=1 python "$SCRIPT" \
   --wandb.entity="$WB_ENTITY" \
   --steps=130000 \
   --save_freq=10000 \
-  --eval_freq=1000
+  --eval_freq=200
