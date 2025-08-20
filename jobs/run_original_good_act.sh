@@ -41,6 +41,19 @@ CKPT_LAST="$RUN_DIR/checkpoints/last"
 export WANDB_DIR="${REPO}/outputs/wandb/${TASK}_${RUN}"
 mkdir -p "$WANDB_DIR"
 
+echo "WANDB_DIR: $WANDB_DIR"
+echo "RUN_DIR: $RUN_DIR"
+echo "CFG: $CFG"
+echo "CKPT_LAST: $CKPT_LAST"
+echo "SCRIPT: $SCRIPT"
+echo "REPO: $REPO"
+echo "TASK: $TASK"
+echo "RUN: $RUN"
+echo "WB_ENTITY: $WB_ENTITY"
+echo "WB_PROJECT: $WB_PROJECT"
+# echo "WB_RUN_ID: $WB_RUN_ID"
+
+
 PYTHONUNBUFFERED=1 python "$SCRIPT" \
   --dataset.repo_id=bearlover365/pick_place_one_white_sock_black_out_blinds \
   --resume=false \
