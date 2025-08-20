@@ -111,13 +111,29 @@ class WandBLogger:
             print('Tried to get sweep ID but not an env variable')
             pass
 
+        # Add tags to help filtering: batch size and learning rates if present
+        extra_tags = []
+        try:
+            from lerobot.configs.train import TrainPipelineConfig as _TPC  # type: ignore
+            bs = getattr(cfg, "batch_size", None)
+            if bs is not None:
+                extra_tags.append(f"bs:{bs}")
+            lr = getattr(cfg.policy, "optimizer_lr", None)
+            if lr is not None:
+                extra_tags.append(f"lr:{lr:.2e}")
+            lrbb = getattr(cfg.policy, "optimizer_lr_backbone", None)
+            if lrbb is not None:
+                extra_tags.append(f"bblr:{lrbb:.2e}")
+        except Exception:
+            pass
+
         wandb.init(
             id=wandb_run_id,
             project=self.cfg.project,
             entity=self.cfg.entity,
             name=run_name,
             notes=self.cfg.notes,
-            tags=cfg_to_group(cfg, return_list=True),
+            tags=cfg_to_group(cfg, return_list=True) + extra_tags,
             dir=self.log_dir,
             config=cfg.to_dict(),
             # TODO(rcadene): try set to True
