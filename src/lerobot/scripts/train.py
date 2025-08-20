@@ -228,6 +228,13 @@ def train(cfg: TrainPipelineConfig):
     cfg.validate()
     logging.info(pformat(cfg.to_dict()))
 
+    # Silence torchvision video deprecation spam
+    import warnings as _warnings
+    _warnings.filterwarnings(
+        "ignore",
+        message="The video decoding and encoding capabilities of torchvision are deprecated",
+    )
+
     if cfg.wandb.enable and cfg.wandb.project:
         wandb_logger = WandBLogger(cfg)
     else:
