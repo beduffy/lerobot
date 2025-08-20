@@ -14,7 +14,7 @@ done
 TASK="${TASK:-d2_single_ep0_act_224x224}"
 RUN_TAG="${RUN_TAG:-overfit_gpu_s30}"
 BATCH="${BATCH:-8}"
-STEPS="${STEPS:-30}"
+STEPS="${STEPS:-30000}"
 LOG_FREQ="${LOG_FREQ:-200}"
 SAVE_CHECKPOINT="${SAVE_CHECKPOINT:-true}"
 SAVE_FREQ="${SAVE_FREQ:-5000}"
