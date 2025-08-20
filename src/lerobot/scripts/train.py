@@ -456,109 +456,87 @@ def train(cfg: TrainPipelineConfig):
             checkpoint_dir = get_step_checkpoint_dir(cfg.output_dir, cfg.steps, step)
             save_checkpoint(checkpoint_dir, step, cfg, policy, optimizer, lr_scheduler)
             update_last_checkpoint(checkpoint_dir)
-
-            # Always compute MAE on training episode 0
-            try:
-                t_tr0 = time.perf_counter()
-                train_mae_png = cfg.output_dir / "train_plots" / f"mae_train_ep0_step_{get_step_identifier(step, cfg.steps)}.png"
-                train_overall_mae, _, _, _ = _evaluate_mae_on_episode(
-                    policy, dataset, episode_idx=0, device=device, out_path=train_mae_png
-                )
-                logging.info(colored("Train MAE ep0:", "yellow", attrs=["bold"]) + f" mae={train_overall_mae:.6f}")
-                t_tr1 = time.perf_counter()
-                logging.info(f"timing_s: mae(train_ep0)={t_tr1 - t_tr0:.2f}")
-                if wandb_logger:
-                    log_dict = {"train/mae_ep0": train_overall_mae}
-                    wandb_logger.log_dict(log_dict, step)
-            except Exception as e:
-                logging.warning(f"Failed to compute/log TRAIN MAE ep0: {e}")
-
-            # Offline validation on held-out episodes
-            if val_dataset is not None:
-                t0 = time.perf_counter()
-                val_loss = _compute_offline_val_loss(policy, val_dataset, device, cfg.batch_size, cfg.num_workers)
-                logging.info(colored("Validation:", "yellow", attrs=["bold"]) + f" loss={val_loss:.6f}")
-                if wandb_logger:
-                    wandb_logger.log_dict({"val_loss": val_loss}, step)
-                # Compute MAE on episode 0 of validation and log + plot
-                try:
-                    t1 = time.perf_counter()
-                    mae_png = cfg.output_dir / "val_plots" / f"mae_ep0_step_{get_step_identifier(step, cfg.steps)}.png"
-                    overall_mae, per_joint_mae, preds_np, gt_np = _evaluate_mae_on_episode(
-                        policy, val_dataset, episode_idx=0, device=device, out_path=mae_png
-                    )
-                    logging.info(colored("Val MAE ep0:", "yellow", attrs=["bold"]) + f" mae={overall_mae:.6f}")
-                    if wandb_logger:
-                        log_dict = {"val/mae_ep0": overall_mae}
-                        if per_joint_mae is not None:
-                            for j, v in enumerate(per_joint_mae):
-                                log_dict[f"val/mae_ep0_joint_{j}"] = float(v)
-                        wandb_logger.log_dict(log_dict, step)
-                        if mae_png.exists():
-                            wandb_logger.log_named_image("mae_ep0_plot", str(mae_png), step, mode="eval", caption=f"mae ep0 step {step}")
-                    # Only MAE timing printed
-                    t2 = time.perf_counter()
-                    logging.info(f"val_timing_s: loss={t1 - t0:.2f} mae={t2 - t1:.2f} total={t2 - t0:.2f}")
-                except Exception as e:
-                    logging.warning(f"Failed to compute/log MAE ep0: {e}")
-
-            # Optionally push this checkpoint (weights + training_state) to the Hugging Face Hub
-            if cfg.policy.push_to_hub and cfg.policy.repo_id:
-                try:
-                    step_id = get_step_identifier(step, cfg.steps)
-                    repo_id_with_step = f"{cfg.policy.repo_id}_{step_id}"
-                    api = HfApi()
-                    created = api.create_repo(repo_id=repo_id_with_step, private=cfg.policy.private, exist_ok=True)
-                    # Upload the entire checkpoint directory so the repo contains both
-                    # 'pretrained_model/' and 'training_state/' at its root.
-                    api.upload_folder(
-                        repo_id=created.repo_id,
-                        # TODO double check that this is still loadable in the same way?? 
-                        repo_type="model",
-                        folder_path=str(checkpoint_dir),
-                        commit_message=f"Upload full checkpoint {step_id}",
-                        allow_patterns=["*.safetensors", "*.json"],
-                        ignore_patterns=["*.tmp", "*.log"],
-                    )
-                    # Log the model URL robustly
-                    created_url = getattr(created, "repo_url", getattr(created, "url", getattr(created, "repo_id", str(created))))
-                    logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created_url}")
-                except Exception as e:
-                    logging.warning(f"Failed to push checkpoint {step} to Hugging Face Hub: {e}")
-        
-
-        if cfg.env and is_eval_step:
+        # TODO below is robot eval, have another for val step on validation episode and on episode 0 to see overfitting. or just hack the below
+        if is_eval_step:
             step_id = get_step_identifier(step, cfg.steps)
-            logging.info(f"Eval policy at step {step}")
+            logging.info(f"Validate policy at step {step}")
             with (
                 torch.no_grad(),
                 torch.autocast(device_type=device.type) if cfg.policy.use_amp else nullcontext(),
             ):
-                eval_info = eval_policy(
-                    eval_env,
-                    policy,
-                    cfg.eval.n_episodes,
-                    videos_dir=cfg.output_dir / "eval" / f"videos_step_{step_id}",
-                    max_episodes_rendered=4,
-                    start_seed=cfg.seed,
-                )
 
-            eval_metrics = {
-                "avg_sum_reward": AverageMeter("∑rwrd", ":.3f"),
-                "pc_success": AverageMeter("success", ":.1f"),
-                "eval_s": AverageMeter("eval_s", ":.3f"),
-            }
-            eval_tracker = MetricsTracker(
-                cfg.batch_size, dataset.num_frames, dataset.num_episodes, eval_metrics, initial_step=step
-            )
-            eval_tracker.eval_s = eval_info["aggregated"].pop("eval_s")
-            eval_tracker.avg_sum_reward = eval_info["aggregated"].pop("avg_sum_reward")
-            eval_tracker.pc_success = eval_info["aggregated"].pop("pc_success")
-            logging.info(eval_tracker)
-            if wandb_logger:
-                wandb_log_dict = {**eval_tracker.to_dict(), **eval_info}
-                wandb_logger.log_dict(wandb_log_dict, step, mode="eval")
-                wandb_logger.log_video(eval_info["video_paths"][0], step, mode="eval")
+
+                # Always compute MAE on training episode 0
+                try:
+                    t_tr0 = time.perf_counter()
+                    train_mae_png = cfg.output_dir / "train_plots" / f"mae_train_ep0_step_{get_step_identifier(step, cfg.steps)}.png"
+                    train_overall_mae, _, _, _ = _evaluate_mae_on_episode(
+                        policy, dataset, episode_idx=0, device=device, out_path=train_mae_png
+                    )
+                    logging.info(colored("Train MAE ep0:", "yellow", attrs=["bold"]) + f" mae={train_overall_mae:.6f}")
+                    t_tr1 = time.perf_counter()
+                    logging.info(f"timing_s: mae(train_ep0)={t_tr1 - t_tr0:.2f}")
+                    if wandb_logger:
+                        log_dict = {"train/mae_ep0": train_overall_mae}
+                        wandb_logger.log_dict(log_dict, step)
+                except Exception as e:
+                    logging.warning(f"Failed to compute/log TRAIN MAE ep0: {e}")
+
+                # Offline validation on held-out episodes
+                if val_dataset is not None:
+                    t0 = time.perf_counter()
+                    val_loss = _compute_offline_val_loss(policy, val_dataset, device, cfg.batch_size, cfg.num_workers)
+                    logging.info(colored("Validation:", "yellow", attrs=["bold"]) + f" loss={val_loss:.6f}")
+                    if wandb_logger:
+                        wandb_logger.log_dict({"val_loss": val_loss}, step)
+                    # Compute MAE on episode 0 of validation and log + plot
+                    try:
+                        t1 = time.perf_counter()
+                        mae_png = cfg.output_dir / "val_plots" / f"mae_ep0_step_{get_step_identifier(step, cfg.steps)}.png"
+                        overall_mae, per_joint_mae, preds_np, gt_np = _evaluate_mae_on_episode(
+                            policy, val_dataset, episode_idx=0, device=device, out_path=mae_png
+                        )
+                        logging.info(colored("Val MAE ep0:", "yellow", attrs=["bold"]) + f" mae={overall_mae:.6f}")
+                        if wandb_logger:
+                            log_dict = {"val/mae_ep0": overall_mae}
+                            if per_joint_mae is not None:
+                                for j, v in enumerate(per_joint_mae):
+                                    log_dict[f"val/mae_ep0_joint_{j}"] = float(v)
+                            wandb_logger.log_dict(log_dict, step)
+                            if mae_png.exists():
+                                wandb_logger.log_named_image("mae_ep0_plot", str(mae_png), step, mode="eval", caption=f"mae ep0 step {step}")
+                        # Only MAE timing printed
+                        t2 = time.perf_counter()
+                        logging.info(f"val_timing_s: loss={t1 - t0:.2f} mae={t2 - t1:.2f} total={t2 - t0:.2f}")
+                    except Exception as e:
+                        logging.warning(f"Failed to compute/log MAE ep0: {e}")
+
+
+                # eval_info = eval_policy(
+                #     eval_env,
+                #     policy,
+                #     cfg.eval.n_episodes,
+                #     videos_dir=cfg.output_dir / "eval" / f"videos_step_{step_id}",
+                #     max_episodes_rendered=4,
+                #     start_seed=cfg.seed,
+                # )
+
+            # eval_metrics = {
+            #     "avg_sum_reward": AverageMeter("∑rwrd", ":.3f"),
+            #     "pc_success": AverageMeter("success", ":.1f"),
+            #     "eval_s": AverageMeter("eval_s", ":.3f"),
+            # }
+            # eval_tracker = MetricsTracker(
+            #     cfg.batch_size, dataset.num_frames, dataset.num_episodes, eval_metrics, initial_step=step
+            # )
+            # eval_tracker.eval_s = eval_info["aggregated"].pop("eval_s")
+            # eval_tracker.avg_sum_reward = eval_info["aggregated"].pop("avg_sum_reward")
+            # eval_tracker.pc_success = eval_info["aggregated"].pop("pc_success")
+            # logging.info(eval_tracker)
+            # if wandb_logger:
+            #     wandb_log_dict = {**eval_tracker.to_dict(), **eval_info}
+            #     wandb_logger.log_dict(wandb_log_dict, step, mode="eval")
+            #     wandb_logger.log_video(eval_info["video_paths"][0], step, mode="eval")
 
     if eval_env:
         eval_env.close()
