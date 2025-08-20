@@ -116,7 +116,7 @@ class TrainPipelineConfig(HubMixin):
             lr_bb = getattr(self.policy, "optimizer_lr_backbone", None)
             def _fmt(v):
                 try:
-                    return f"{float(v):.0e}"
+                    return f"{float(v):.1e}"
                 except Exception:
                     return str(v)
             smp = self.target_samples if self.target_samples is not None else self.steps * self.batch_size
