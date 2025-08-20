@@ -1,7 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+# task is:
+# run is run id if im doing many
+# run dir is outputs
+# wandb is same as run dir but an extra folder
+
 # Allow overriding via environment; provide sensible defaults
-TASK="${TASK:-pick_place_one_white_sock_black_out_blinds}"
+# TASK="${TASK:-pick_place_one_white_sock_black_out_blinds}"
+TASK="${TASK:-d2_original_good_act}"
 RUN="${RUN:-3}"
 WB_ENTITY="benfduffy-bearcover-gmbh"
 WB_PROJECT="lerobot"
@@ -14,6 +21,14 @@ RUN_DIR="$REPO/outputs/train/${TASK}_${RUN}"
 CFG="$RUN_DIR/train_config.json"
 CKPT_LAST="$RUN_DIR/checkpoints/last"
 # CKPT_LAST="$RUN_DIR/checkpoints/90000"
+
+# D1
+# DATASET_REPO_ID="bearlover365/pick_place_one_white_sock_black_out_blinds"
+#   --dataset.repo_id=bearlover365/pick_place_one_white_sock_black_out_blinds \
+# D2
+DATASET_REPO_ID="bearlover365/pick_place_up_to_four_white_socks_black_out_blinds"
+#   --dataset.repo_id=bearlover365/pick_place_up_to_four_white_socks_black_out_blinds \
+
 
 [ -f "$SCRIPT" ] || { echo "Missing $SCRIPT"; exit 1; }
 # [ -d "$RUN_DIR" ] || { echo "Missing $RUN_DIR"; exit 1; }  # not resuming
@@ -54,9 +69,11 @@ echo "WB_PROJECT: $WB_PROJECT"
 # echo "WB_RUN_ID: $WB_RUN_ID"
 
 
+echo "DATASET_REPO_ID: $DATASET_REPO_ID"
+
 PYTHONUNBUFFERED=1 python "$SCRIPT" \
-  --dataset.repo_id=bearlover365/pick_place_one_white_sock_black_out_blinds \
-  --resume=false \
+  --dataset.repo_id="$DATASET_REPO_ID" \
+  --resume=true \
   --policy.type=act \
   --output_dir="$RUN_DIR" \
   --job_name="${TASK}_${RUN}_original_good_act" \
@@ -67,4 +84,4 @@ PYTHONUNBUFFERED=1 python "$SCRIPT" \
   --wandb.entity="$WB_ENTITY" \
   --steps=130000 \
   --save_freq=10000 \
-  --eval_freq=200
+  --eval_freq=1000
