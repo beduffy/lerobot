@@ -1,4 +1,4 @@
-program: /teamspace/studios/this_studio/lerobot/jobs/train_entrypoint.py
+program: /teamspace/studios/this_studio/lerobot/src/lerobot/scripts/train.py
 method: grid
 name: act_lr_bs_quick_200
 project: lerobot
@@ -39,9 +39,9 @@ parameters:
   policy.push_to_hub:
     value: false
   policy.optimizer_lr:
-    value: 0.0
+    value: null
   policy.optimizer_lr_backbone:
-    value: 0.0
+    value: null
   dataset.repo_id:
     value: '["bearlover365/pick_place_one_white_sock_black_out_blinds","bearlover365/pick_place_up_to_four_white_socks_black_out_blinds"]'
   dataset.video_backend:
