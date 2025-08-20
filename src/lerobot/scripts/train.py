@@ -417,35 +417,23 @@ def train(cfg: TrainPipelineConfig):
                     repo_id_with_step = f"{cfg.policy.repo_id}_{step_id}"
                     api = HfApi()
                     created = api.create_repo(repo_id=repo_id_with_step, private=cfg.policy.private, exist_ok=True)
-                    pretrained_dir = checkpoint_dir / "pretrained_model"
-                    training_state_dir = checkpoint_dir / "training_state"
-                    # Upload pretrained model (weights + config) at repo root for easy loading
+                    # Upload the entire checkpoint directory so the repo contains both
+                    # 'pretrained_model/' and 'training_state/' at its root.
                     api.upload_folder(
                         repo_id=created.repo_id,
+                        # TODO double check that this is still loadable in the same way?? 
                         repo_type="model",
-                        folder_path=pretrained_dir,
-                        commit_message=f"Upload checkpoint {step_id} pretrained_model",
+                        folder_path=str(checkpoint_dir),
+                        commit_message=f"Upload full checkpoint {step_id}",
                         allow_patterns=["*.safetensors", "*.json"],
                         ignore_patterns=["*.tmp", "*.log"],
                     )
-                    # Also upload training_state to enable true resume across machines
-                    if training_state_dir.exists():
-                        api.upload_folder(
-                            repo_id=created.repo_id,
-                            repo_type="model",
-                            folder_path=training_state_dir,
-                            path_in_repo="training_state",
-                            commit_message=f"Upload checkpoint {step_id} training_state",
-                            allow_patterns=["*.json", "*.safetensors"],
-                            ignore_patterns=["*.tmp", "*.log"],
-                        )
-                    # TODO does it work for single datasets? gpt5 thought it was fixed but was it?
-                    # Log the model URL of the created repo
-                    # logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created.repo_url.url}")
-                    logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created.repo_url}")
+                    # Log the model URL robustly
+                    created_url = getattr(created, "repo_url", getattr(created, "url", getattr(created, "repo_id", str(created))))
+                    logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created_url}")
                 except Exception as e:
                     logging.warning(f"Failed to push checkpoint {step} to Hugging Face Hub: {e}")
-
+        
 
         if cfg.env and is_eval_step:
             step_id = get_step_identifier(step, cfg.steps)
