@@ -53,6 +53,9 @@ class TrainPipelineConfig(HubMixin):
     num_workers: int = 4
     batch_size: int = 8
     steps: int = 100_000
+    # Optional: ensure fairness across batch sizes by targeting a fixed number of samples seen
+    # If set, effective steps will be computed as ceil(target_samples / batch_size)
+    target_samples: int | None = None
     # eval_freq: int = 20_000 
     eval_freq: int = 10_000 
     log_freq: int = 200
@@ -100,6 +103,33 @@ class TrainPipelineConfig(HubMixin):
                 self.job_name = f"{self.policy.type}"
             else:
                 self.job_name = f"{self.env.type}_{self.policy.type}"
+
+        # Derive effective steps from target_samples if provided
+        if self.target_samples is not None and self.batch_size > 0:
+            # Delay math import to avoid global import churn
+            import math as _math
+            self.steps = int(_math.ceil(self.target_samples / self.batch_size))
+
+        # Enrich job name with key hyperparameters for easier comparison in W&B
+        try:
+            lr = getattr(self.policy, "optimizer_lr", None)
+            lr_bb = getattr(self.policy, "optimizer_lr_backbone", None)
+            def _fmt(v):
+                try:
+                    return f"{float(v):.1e}"
+                except Exception:
+                    return str(v)
+            smp = self.target_samples if self.target_samples is not None else self.steps * self.batch_size
+            # Include sweep id if present
+            import os as _os
+            sid = _os.environ.get("WANDB_SWEEP_ID")
+            sid_part = f"_swp{sid[:8]}" if sid else ""
+            self.job_name = (
+                f"{self.job_name}{sid_part}_bs{self.batch_size}"
+                f"_lr{_fmt(lr)}_bblr{_fmt(lr_bb)}_smp{smp}"
+            )
+        except Exception:
+            pass
 
         if not self.resume and isinstance(self.output_dir, Path) and self.output_dir.is_dir():
             raise FileExistsError(

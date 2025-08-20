@@ -440,7 +440,8 @@ def train(cfg: TrainPipelineConfig):
                 wandb_log_dict = train_tracker.to_dict()
                 if output_dict:
                     wandb_log_dict.update(output_dict)
-                wandb_logger.log_dict(wandb_log_dict, step)
+                # Log using samples as the custom step key to enable W&B x-axis as "num samples seen"
+                wandb_logger.log_dict(wandb_log_dict, custom_step_key="samples")
             train_tracker.reset_averages()
         elif is_log_step:
             logging.info(train_tracker)
@@ -448,7 +449,8 @@ def train(cfg: TrainPipelineConfig):
                 wandb_log_dict = train_tracker.to_dict()
                 if output_dict:
                     wandb_log_dict.update(output_dict)
-                wandb_logger.log_dict(wandb_log_dict, step)
+                # Log using samples as the custom step key to enable W&B x-axis as "num samples seen"
+                wandb_logger.log_dict(wandb_log_dict, custom_step_key="samples")
             train_tracker.reset_averages()
 
         if cfg.save_checkpoint and is_saving_step:
@@ -456,7 +458,46 @@ def train(cfg: TrainPipelineConfig):
             checkpoint_dir = get_step_checkpoint_dir(cfg.output_dir, cfg.steps, step)
             save_checkpoint(checkpoint_dir, step, cfg, policy, optimizer, lr_scheduler)
             update_last_checkpoint(checkpoint_dir)
-        # TODO below is robot eval, have another for val step on validation episode and on episode 0 to see overfitting. or just hack the below
+
+            # if wandb_logger:
+                # wandb_logger.log_policy(checkpoint_dir)
+
+            # Optionally push this checkpoint (weights + training_state) to the Hugging Face Hub
+            if cfg.policy.push_to_hub and cfg.policy.repo_id:
+                try:
+                    step_id = get_step_identifier(step, cfg.steps)
+                    repo_id_with_step = f"{cfg.policy.repo_id}_{step_id}"
+                    api = HfApi()
+                    created = api.create_repo(repo_id=repo_id_with_step, private=cfg.policy.private, exist_ok=True)
+                    pretrained_dir = checkpoint_dir / "pretrained_model"
+                    training_state_dir = checkpoint_dir / "training_state"
+                    # Upload pretrained model (weights + config) at repo root for easy loading
+                    api.upload_folder(
+                        repo_id=created.repo_id,
+                        repo_type="model",
+                        folder_path=pretrained_dir,
+                        commit_message=f"Upload checkpoint {step_id} pretrained_model",
+                        allow_patterns=["*.safetensors", "*.json"],
+                        ignore_patterns=["*.tmp", "*.log"],
+                    )
+                    # Also upload training_state to enable true resume across machines
+                    if training_state_dir.exists():
+                        api.upload_folder(
+                            repo_id=created.repo_id,
+                            repo_type="model",
+                            folder_path=training_state_dir,
+                            path_in_repo="training_state",
+                            commit_message=f"Upload checkpoint {step_id} training_state",
+                            allow_patterns=["*.json", "*.safetensors"],
+                            ignore_patterns=["*.tmp", "*.log"],
+                        )
+                    # TODO does it work for single datasets? gpt5 thought it was fixed but was it?
+                    # Log the model URL of the created repo
+                    # logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created.repo_url.url}")
+                    logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created.repo_url}")
+                except Exception as e:
+                    logging.warning(f"Failed to push checkpoint {step} to Hugging Face Hub: {e}")
+
         if is_eval_step:
             step_id = get_step_identifier(step, cfg.steps)
             logging.info(f"Validate policy at step {step}")
@@ -464,8 +505,6 @@ def train(cfg: TrainPipelineConfig):
                 torch.no_grad(),
                 torch.autocast(device_type=device.type) if cfg.policy.use_amp else nullcontext(),
             ):
-
-
                 # Always compute MAE on training episode 0
                 try:
                     t_tr0 = time.perf_counter()
@@ -511,32 +550,6 @@ def train(cfg: TrainPipelineConfig):
                     except Exception as e:
                         logging.warning(f"Failed to compute/log MAE ep0: {e}")
 
-
-                # eval_info = eval_policy(
-                #     eval_env,
-                #     policy,
-                #     cfg.eval.n_episodes,
-                #     videos_dir=cfg.output_dir / "eval" / f"videos_step_{step_id}",
-                #     max_episodes_rendered=4,
-                #     start_seed=cfg.seed,
-                # )
-
-            # eval_metrics = {
-            #     "avg_sum_reward": AverageMeter("∑rwrd", ":.3f"),
-            #     "pc_success": AverageMeter("success", ":.1f"),
-            #     "eval_s": AverageMeter("eval_s", ":.3f"),
-            # }
-            # eval_tracker = MetricsTracker(
-            #     cfg.batch_size, dataset.num_frames, dataset.num_episodes, eval_metrics, initial_step=step
-            # )
-            # eval_tracker.eval_s = eval_info["aggregated"].pop("eval_s")
-            # eval_tracker.avg_sum_reward = eval_info["aggregated"].pop("avg_sum_reward")
-            # eval_tracker.pc_success = eval_info["aggregated"].pop("pc_success")
-            # logging.info(eval_tracker)
-            # if wandb_logger:
-            #     wandb_log_dict = {**eval_tracker.to_dict(), **eval_info}
-            #     wandb_logger.log_dict(wandb_log_dict, step, mode="eval")
-            #     wandb_logger.log_video(eval_info["video_paths"][0], step, mode="eval")
 
     if eval_env:
         eval_env.close()

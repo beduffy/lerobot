@@ -101,13 +101,39 @@ class WandBLogger:
             if cfg.resume
             else None
         )
+        # Try to include sweep id and concise hyperparams in the run name for easier identification
+        run_name = self.job_name
+        try:
+            sid = os.environ.get("WANDB_SWEEP_ID")
+            if sid and sid[:8] not in run_name:
+                run_name = f"{run_name}_swp{sid[:8]}"
+        except Exception:
+            print('Tried to get sweep ID but not an env variable')
+            pass
+
+        # Add tags to help filtering: batch size and learning rates if present
+        extra_tags = []
+        try:
+            from lerobot.configs.train import TrainPipelineConfig as _TPC  # type: ignore
+            bs = getattr(cfg, "batch_size", None)
+            if bs is not None:
+                extra_tags.append(f"bs:{bs}")
+            lr = getattr(cfg.policy, "optimizer_lr", None)
+            if lr is not None:
+                extra_tags.append(f"lr:{lr:.2e}")
+            lrbb = getattr(cfg.policy, "optimizer_lr_backbone", None)
+            if lrbb is not None:
+                extra_tags.append(f"bblr:{lrbb:.2e}")
+        except Exception:
+            pass
+
         wandb.init(
             id=wandb_run_id,
             project=self.cfg.project,
             entity=self.cfg.entity,
-            name=self.job_name,
+            name=run_name,
             notes=self.cfg.notes,
-            tags=cfg_to_group(cfg, return_list=True),
+            tags=cfg_to_group(cfg, return_list=True) + extra_tags,
             dir=self.log_dir,
             config=cfg.to_dict(),
             # TODO(rcadene): try set to True
@@ -126,6 +152,12 @@ class WandBLogger:
         print(colored("Logs will be synced with wandb.", "blue", attrs=["bold"]))
         logging.info(f"Track this run --> {colored(wandb.run.get_url(), 'yellow', attrs=['bold'])}")
         self._wandb = wandb
+        # Prefer plotting x-axis in terms of samples seen rather than global step
+        try:
+            self._wandb.define_metric("train/*", step_metric="train/samples")
+            self._wandb.define_metric("eval/*", step_metric="eval/samples")
+        except Exception:
+            pass
 
     def log_policy(self, checkpoint_dir: Path):
         """Checkpoints the policy to wandb."""
