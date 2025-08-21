@@ -735,17 +735,16 @@ python -m lerobot.record \
 export HF_USER=bearlover365
 export task_name="d1_d2_act224_s500k_b8_ckpt25k"
 export EVAL_ROOT="$HOME/.cache/lerobot_local/eval_${task_name}"
-
 # Optional: ensure a clean slate locally
 rm -rf "$EVAL_ROOT"
-
+model_step_number=250000
 # Run record WITHOUT --resume and with push_to_hub=false
 python -m lerobot.record \
   --robot.type=so101_follower \
   --robot.port=/dev/ttyACM0 \
   --robot.id=my_awesome_follower_arm \
   --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
-  --policy.path=${HF_USER}/${task_name}_150000 \
+  --policy.path=${HF_USER}/${task_name}_${model_step_number} \
   --dataset.repo_id=${HF_USER}/eval_${task_name} \
   --dataset.root="$EVAL_ROOT" \
   --dataset.single_task="Grab all socks and place into your box" \
