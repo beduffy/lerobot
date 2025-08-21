@@ -117,10 +117,26 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
                     local_files_only=local_files_only,
                 )
                 policy = cls._load_as_safetensor(instance, model_file, config.device, strict)
-            except HfHubHTTPError as e:
-                raise FileNotFoundError(
-                    f"{SAFETENSORS_SINGLE_FILE} not found on the HuggingFace Hub in {model_id}"
-                ) from e
+            except HfHubHTTPError as e_root:
+                # Fallback: some repos store files under a 'pretrained_model/' subfolder
+                try:
+                    model_file = hf_hub_download(
+                        repo_id=model_id,
+                        filename=SAFETENSORS_SINGLE_FILE,
+                        subfolder="pretrained_model",
+                        revision=revision,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        resume_download=resume_download,
+                        token=token,
+                        local_files_only=local_files_only,
+                    )
+                    policy = cls._load_as_safetensor(instance, model_file, config.device, strict)
+                except HfHubHTTPError as e_sub:
+                    raise FileNotFoundError(
+                        f"{SAFETENSORS_SINGLE_FILE} not found on the HuggingFace Hub in {model_id}"
+                    ) from e_sub
 
         policy.to(config.device)
         policy.eval()
