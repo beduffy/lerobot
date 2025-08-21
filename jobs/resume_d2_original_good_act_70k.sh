@@ -4,7 +4,9 @@ set -euo pipefail
 # Resume the D2 run exactly from the 70k checkpoint with the correct W&B run id
 
 # CHECKPOINT_DIR="/teamspace/studios/this_studio/lerobot/outputs/train/d2_original_good_act_1/checkpoints/070000"
-CHECKPOINT_DIR="/teamspace/studios/this_studio/lerobot/outputs/train/d2_original_good_act_1/checkpoints/130000"
+# CHECKPOINT_DIR="/teamspace/studios/this_studio/lerobot/outputs/train/d2_original_good_act_1/checkpoints/130000"
+# CHECKPOINT_DIR="/teamspace/studios/this_studio/lerobot/outputs/train/d2_original_good_act_1/checkpoints/200000"
+CHECKPOINT_DIR="/teamspace/studios/this_studio/lerobot/outputs/train/d2_original_good_act_1/checkpoints/280000"
 PRETRAINED_DIR="$CHECKPOINT_DIR/pretrained_model"
 CFG="$PRETRAINED_DIR/train_config.json"
 
