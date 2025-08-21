@@ -226,42 +226,83 @@ def _evaluate_mae_on_episode(
         else:
             raise AttributeError("Dataset does not expose episode indices for MAE computation.")
     max_frames_env = int(os.environ.get("LEROBOT_VAL_MAE_MAX_FRAMES", "200"))
-    max_frames = max_frames_env  # cap frames for quick MAE
-    if len(full_indices) > max_frames:
-        stride = max(1, len(full_indices) // max_frames)
-        indices = full_indices[::stride][:max_frames]
+    # Use a contiguous window from the start of the episode to preserve temporal coherence
+    # for chunk-based policies. Subsampling with stride breaks action chunk semantics.
+    if max_frames_env > 0 and len(full_indices) > max_frames_env:
+        indices = full_indices[: max_frames_env]
     else:
         indices = full_indices
 
-    # Iterate frame-by-frame (batch_size=1) for consistent select_action semantics
+    # Batched fast path (when allowed), else frame-by-frame fallback
     preds = []
     gts = []
     policy.eval()
-    policy.reset()
-    with torch.no_grad():
-        for idx in indices:
-            sample = get_sample(idx)
-            inp = {}
-            for key, val in sample.items():
-                if key.startswith("observation.") and isinstance(val, torch.Tensor):
-                    inp[key] = val.unsqueeze(0).to(device)
-            if not inp:
-                continue
-            pred = policy.select_action(inp)  # (B, A)
-            if pred.ndim == 3:  # (B, S, A) -> first step
-                pred = pred[:, 0, :]
-            gt = sample.get("action")
-            if isinstance(gt, torch.Tensor):
-                if gt.ndim == 1:
-                    gt = gt.unsqueeze(0)
-                preds.append(pred[0].detach().cpu())
-                gts.append(gt[0].detach().cpu())
+    mae_bs_env = int(os.environ.get("LEROBOT_VAL_MAE_BATCH_SIZE", "0"))
+    mae_bs = mae_bs_env if mae_bs_env > 0 else (64 if device.type == "cuda" else 1)
+
+    if mae_bs > 1:
+        subset = torch.utils.data.Subset(source_dataset, indices)
+        dl = torch.utils.data.DataLoader(
+            subset,
+            batch_size=mae_bs,
+            shuffle=False,
+            num_workers=2,
+            pin_memory=device.type == "cuda",
+        )
+        autocast_ctx = torch.amp.autocast(device_type="cuda") if device.type == "cuda" else nullcontext()
+        with torch.inference_mode(), autocast_ctx:
+            for batch in dl:
+                inp = {}
+                for key, val in batch.items():
+                    if key.startswith("observation.") and isinstance(val, torch.Tensor):
+                        inp[key] = val.to(device, non_blocking=device.type == "cuda")
+                if not inp:
+                    continue
+                if hasattr(policy, "predict_action_chunk"):
+                    chunk = policy.predict_action_chunk(inp)
+                    pred = chunk[:, 0, :]
+                else:
+                    out = policy.select_action(inp)
+                    pred = out[:, 0, :] if out.ndim == 3 else out
+                gt = batch.get("action")
+                if isinstance(gt, torch.Tensor):
+                    # Align GT to first-step action shape when sequences are provided (B, S, A)
+                    if gt.ndim == 3:
+                        gt = gt[:, 0, :]
+                    preds.append(pred.detach().cpu())
+                    gts.append(gt.detach().cpu())
+    else:
+        with torch.no_grad():
+            for idx in indices:
+                sample = get_sample(idx)
+                inp = {}
+                for key, val in sample.items():
+                    if key.startswith("observation.") and isinstance(val, torch.Tensor):
+                        inp[key] = val.unsqueeze(0).to(device)
+                if not inp:
+                    continue
+                if hasattr(policy, "predict_action_chunk"):
+                    pred_chunk = policy.predict_action_chunk(inp)
+                    pred = pred_chunk[:, 0, :]
+                else:
+                    pred = policy.select_action(inp)
+                gt = sample.get("action")
+                if isinstance(gt, torch.Tensor):
+                    if gt.ndim == 1:
+                        gt = gt.unsqueeze(0)
+                    preds.append(pred[0].detach().cpu())
+                    gts.append(gt[0].detach().cpu())
 
     if len(preds) == 0:
         return float("nan"), None, None, None
 
-    preds_t = torch.stack(preds, dim=0)
-    gts_t = torch.stack(gts, dim=0)
+    # Concatenate mini-batches when using batched path
+    if isinstance(preds[0], torch.Tensor) and preds[0].dim() == 2:
+        preds_t = torch.cat(preds, dim=0)
+        gts_t = torch.cat(gts, dim=0)
+    else:
+        preds_t = torch.stack(preds, dim=0)
+        gts_t = torch.stack(gts, dim=0)
     per_joint_mae_t = torch.mean(torch.abs(preds_t - gts_t), dim=0)
     overall_mae = float(torch.mean(per_joint_mae_t).item())
     per_joint_mae = per_joint_mae_t.tolist()
@@ -270,18 +311,26 @@ def _evaluate_mae_on_episode(
     if plt is not None:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         num_joints = preds_t.shape[1]
-        fig, axes = plt.subplots(num_joints, 1, figsize=(10, max(2, 2 * num_joints)))
+        # Share x-axis to keep time aligned; annotate overall MAE in suptitle
+        fig, axes = plt.subplots(num_joints, 1, figsize=(11, max(2.5, 2.2 * num_joints)), sharex=True)
         if num_joints == 1:
             axes = [axes]
         xs = np.arange(preds_t.shape[0])
         for j in range(num_joints):
             ax = axes[j]
-            ax.plot(xs, gts_t[:, j].numpy(), label="GT")
-            ax.plot(xs, preds_t[:, j].numpy(), label="Pred")
-            ax.set_title(f"Dim {j}  MAE={per_joint_mae[j]:.4f}")
-            ax.legend(loc="best")
-        fig.tight_layout()
-        fig.savefig(out_path, dpi=150)
+            ax.plot(xs, gts_t[:, j].numpy(), label="GT", color="#d62728", linestyle="--", linewidth=1.5)
+            ax.plot(xs, preds_t[:, j].numpy(), label="Pred", color="#1f77b4", linewidth=1.5)
+            ax.set_ylabel(f"Dim {j}")
+            ax.grid(True, alpha=0.25)
+            # Per-joint MAE in the corner
+            ax.text(0.01, 0.92, f"MAE={per_joint_mae[j]:.4f}", transform=ax.transAxes, fontsize=9,
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, linewidth=0.5))
+            if j == 0:
+                ax.legend(loc="best")
+        axes[-1].set_xlabel("Time Step")
+        fig.suptitle(f"Pred vs GT (Episode 0)  Overall MAE={overall_mae:.4f}")
+        fig.tight_layout(rect=(0, 0, 1, 0.97))
+        fig.savefig(out_path, dpi=160)
         plt.close(fig)
 
     return overall_mae, per_joint_mae, preds_t.numpy(), gts_t.numpy()
@@ -490,7 +539,7 @@ def train(cfg: TrainPipelineConfig):
         # TODO below is robot eval, have another for val step on validation episode and on episode 0 to see overfitting. or just hack the below
         if is_eval_step:
             step_id = get_step_identifier(step, cfg.steps)
-            logging.info(f"Validate policy at step {step}")
+            logging.info(f"Validate policy at step {step} ({step/1000.0:.1f}K)")
             with (
                 torch.no_grad(),
                 torch.autocast(device_type=device.type) if cfg.policy.use_amp else nullcontext(),
@@ -503,13 +552,13 @@ def train(cfg: TrainPipelineConfig):
                         policy, dataset, episode_idx=0, device=device, out_path=train_mae_png
                     )
                     logging.info(colored("Train MAE ep0:", "yellow", attrs=["bold"]) + f" mae={train_overall_mae:.6f}")
-                    t_tr1 = time.perf_counter()
-                    logging.info(f"timing_s: mae(train_ep0)={t_tr1 - t_tr0:.2f}")
                     if wandb_logger:
                         log_dict = {"train/mae_ep0": train_overall_mae}
                         wandb_logger.log_dict(log_dict, step)
                         if train_mae_png.exists():
-                            wandb_logger.log_named_image("mae_ep0_plot", str(train_mae_png), step, mode="train", caption=f"train mae ep0 step {step}")
+                            wandb_logger.log_named_image("train_mae_ep0_plot", str(train_mae_png), step, mode="train", caption=f"train mae ep0 step {step}")
+                    t_tr1 = time.perf_counter()
+                    logging.info(f"timing_s: mae(train_ep0)={t_tr1 - t_tr0:.2f}")
                 except Exception as e:
                     logging.warning(f"Failed to compute/log TRAIN MAE ep0: {e}")
 
@@ -535,7 +584,7 @@ def train(cfg: TrainPipelineConfig):
                                     log_dict[f"val/mae_ep0_joint_{j}"] = float(v)
                             wandb_logger.log_dict(log_dict, step)
                             if mae_png.exists():
-                                wandb_logger.log_named_image("mae_ep0_plot", str(mae_png), step, mode="eval", caption=f"mae ep0 step {step}")
+                                wandb_logger.log_named_image("val_mae_ep0_plot", str(mae_png), step, mode="eval", caption=f"val mae ep0 step {step}")
                         # Only MAE timing printed
                         t2 = time.perf_counter()
                         logging.info(f"val_timing_s: loss={t1 - t0:.2f} mae={t2 - t1:.2f} total={t2 - t0:.2f}")
