@@ -14,19 +14,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import logging
+import os
 import time
 from contextlib import nullcontext
 from pprint import pformat
 from typing import Any
+from copy import deepcopy
+
+try:
+    import matplotlib.pyplot as plt
+    import numpy as np
+except Exception:
+    # not optional, hard crash
+    raise ImportError("matplotlib and numpy are required for plotting")
 
 import torch
 from termcolor import colored
+import torch.nn.functional as F  # noqa: N812
+import numpy as np
 from torch.amp import GradScaler
 from torch.optim import Optimizer
 
 from lerobot.configs import parser
 from lerobot.configs.train import TrainPipelineConfig
 from lerobot.datasets.factory import make_dataset
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.datasets.sampler import EpisodeAwareSampler
 from lerobot.datasets.utils import cycle
 from lerobot.envs.factory import make_env
@@ -119,90 +131,52 @@ def _compute_offline_val_loss(policy: PreTrainedPolicy, dataset, device: torch.d
         drop_last=False,
     )
     losses = []
+    max_batches = int(os.environ.get("LEROBOT_VAL_MAX_BATCHES", "2"))
+    max_frames = int(os.environ.get("LEROBOT_VAL_MAX_FRAMES", "256"))
+    processed_batches = 0
+    processed_frames = 0
     with torch.no_grad(), torch.autocast(device_type=device.type) if policy.config.use_amp else nullcontext():
         for batch in dataloader:
             for key in batch:
                 if isinstance(batch[key], torch.Tensor):
                     batch[key] = batch[key].to(device, non_blocking=device.type == "cuda")
-            loss, _ = policy.forward(batch)
-            losses.append(loss.item())
+            # ACT expects sequence targets during training; compute a simple 1-step L1 on predicted first action
+            if getattr(policy, "name", None) == "act":
+                with torch.no_grad():
+                    pred_chunk = policy.predict_action_chunk(batch)  # (B, S, A)
+                pred = pred_chunk[:, :1]  # (B, 1, A)
+                gt = batch.get("action")
+                if gt is None:
+                    processed_batches += 1
+                    continue
+                if gt.ndim == 2:  # (B, A) -> (B, 1, A)
+                    gt = gt.unsqueeze(1)
+                l1 = F.l1_loss(pred, gt, reduction="mean")
+                losses.append(l1.item())
+            else:
+                loss, _ = policy.forward(batch)
+                losses.append(loss.item())
+            processed_batches += 1
+            processed_frames += batch_size
+            if processed_batches >= max_batches or processed_frames >= max_frames:
+                break
     policy.train()
     return float(sum(losses) / max(1, len(losses)))
 
 
-def _plot_action_state_trajectories(policy: PreTrainedPolicy, dataset, device: torch.device, out_path):
-    """Generate a simple action vs state plot for the first held-out episode.
-
-    Saves a PNG at out_path. This is lightweight: it samples one episode worth of frames and
-    runs a forward pass to compare predicted action against ground-truth action per dimension.
-    """
-    try:
-        import matplotlib.pyplot as plt
-        import numpy as np
-    except Exception:
-        return  # plotting optional
-
-    # Extract the first episode indices
-    ep_idx = None
-    for i in range(len(dataset)):
-        item = dataset[i]
-        ep_idx = int(item["episode_index"]) if hasattr(item["episode_index"], "item") else int(item["episode_index"])
-        break
-    if ep_idx is None:
+def _plot_action_state_trajectories(
+    policy: PreTrainedPolicy,
+    dataset,
+    device: torch.device,
+    out_path,
+    *,
+    preds_np: np.ndarray | None = None,
+    gt_np: np.ndarray | None = None,
+):
+    """Plot Pred vs GT for a few dims. If arrays are provided, reuse them to avoid extra decode/forward."""
+    if preds_np is None or gt_np is None:
         return
 
-    indices = []
-    for i in range(len(dataset)):
-        item = dataset[i]
-        this_ep = int(item["episode_index"]) if hasattr(item["episode_index"], "item") else int(item["episode_index"])
-        if this_ep == ep_idx:
-            indices.append(i)
-        elif indices:
-            break
-
-    # Build a mini-batch for the whole episode
-    batch = dataset.hf_dataset.select(indices)  # raw HF dataset rows
-    # Convert via dataset transform for a proper batch
-    collated = {}
-    for key in dataset.hf_features:
-        vals = [dataset[i][key] for i in indices]
-        if isinstance(vals[0], torch.Tensor):
-            collated[key] = torch.stack(vals)
-        else:
-            collated[key] = torch.tensor(np.stack([np.array(v) for v in vals]))
-
-    # Add visuals if present
-    for cam in getattr(dataset.meta, "camera_keys", []):
-        if cam in dataset.hf_features or cam in batch.features:  # loaded as tensors by __getitem__
-            vals = [dataset[i][cam] for i in indices]
-            if isinstance(vals[0], torch.Tensor):
-                collated[cam] = torch.stack(vals)
-
-    # Move to device
-    for key in list(collated.keys()):
-        if isinstance(collated[key], torch.Tensor):
-            collated[key] = collated[key].to(device)
-
-    policy.eval()
-    with torch.no_grad(), torch.autocast(device_type=device.type) if policy.config.use_amp else nullcontext():
-        loss, out = policy.forward(collated)
-        # Try to get predicted action if available in out
-        pred = None
-        if isinstance(out, dict):
-            for k in out:
-                if k.startswith("pred_action") or k == "action_pred" or k == "action":
-                    pred = out[k]
-                    break
-        if pred is None and "action" in collated:
-            # Some policies only expose loss; skip plotting in that case
-            pred = collated["action"] * 0.0
-
-    gt = collated.get("action")
-    if gt is None or pred is None:
-        return
-
-    gt_np = gt.detach().float().cpu().numpy()
-    pred_np = pred.detach().float().cpu().numpy()
     T, D = gt_np.shape[0], gt_np.shape[-1]
 
     fig_h = 2.0 * min(6, D)
@@ -211,8 +185,8 @@ def _plot_action_state_trajectories(policy: PreTrainedPolicy, dataset, device: t
     xs = np.arange(T)
     for d in range(min(6, D)):
         ax = axes[d]
-        ax.plot(xs, gt_np[:, d], 'r--', label='State' if d == 0 else None)
-        ax.plot(xs, pred_np[:, d], 'b-', label='Action' if d == 0 else None)
+        ax.plot(xs, gt_np[:, d], 'r--', label='GT' if d == 0 else None)
+        ax.plot(xs, preds_np[:, d], 'b-', label='Pred' if d == 0 else None)
         ax.set_title(f"Dim {d}")
         ax.set_xlabel("Time Step")
     if D > 0:
@@ -223,10 +197,156 @@ def _plot_action_state_trajectories(policy: PreTrainedPolicy, dataset, device: t
     plt.close(fig)
 
 
+def _evaluate_mae_on_episode(
+    policy: PreTrainedPolicy,
+    dataset,
+    episode_idx: int,
+    device: torch.device,
+    out_path,
+) -> tuple[float, list[float] | None, np.ndarray | None, np.ndarray | None]:
+    """Evaluate MAE on a single episode using 1-step actions and optionally save a plot.
+
+    Returns overall_mae and per_joint_mae (or None if plot disabled).
+    """
+
+    # Build index range for the episode (subsample for speed on CPU), handling multi-dataset
+    source_dataset = dataset
+    try:
+        ep_from = dataset.episode_data_index["from"][episode_idx].item()
+        ep_to = dataset.episode_data_index["to"][episode_idx].item()
+        full_indices = list(range(ep_from, ep_to))
+        get_sample = lambda i: source_dataset[i]
+    except Exception:
+        if hasattr(dataset, "_datasets") and len(getattr(dataset, "_datasets")) > 0:
+            source_dataset = dataset._datasets[0]
+            ep_from = source_dataset.episode_data_index["from"][episode_idx].item()
+            ep_to = source_dataset.episode_data_index["to"][episode_idx].item()
+            full_indices = list(range(ep_from, ep_to))
+            get_sample = lambda i: source_dataset[i]
+        else:
+            raise AttributeError("Dataset does not expose episode indices for MAE computation.")
+    max_frames_env = int(os.environ.get("LEROBOT_VAL_MAE_MAX_FRAMES", "200"))
+    # Use a contiguous window from the start of the episode to preserve temporal coherence
+    # for chunk-based policies. Subsampling with stride breaks action chunk semantics.
+    if max_frames_env > 0 and len(full_indices) > max_frames_env:
+        indices = full_indices[: max_frames_env]
+    else:
+        indices = full_indices
+
+    # Batched fast path (when allowed), else frame-by-frame fallback
+    preds = []
+    gts = []
+    policy.eval()
+    mae_bs_env = int(os.environ.get("LEROBOT_VAL_MAE_BATCH_SIZE", "0"))
+    mae_bs = mae_bs_env if mae_bs_env > 0 else (64 if device.type == "cuda" else 1)
+
+    if mae_bs > 1:
+        subset = torch.utils.data.Subset(source_dataset, indices)
+        dl = torch.utils.data.DataLoader(
+            subset,
+            batch_size=mae_bs,
+            shuffle=False,
+            num_workers=2,
+            pin_memory=device.type == "cuda",
+        )
+        autocast_ctx = torch.amp.autocast(device_type="cuda") if device.type == "cuda" else nullcontext()
+        with torch.inference_mode(), autocast_ctx:
+            for batch in dl:
+                inp = {}
+                for key, val in batch.items():
+                    if key.startswith("observation.") and isinstance(val, torch.Tensor):
+                        inp[key] = val.to(device, non_blocking=device.type == "cuda")
+                if not inp:
+                    continue
+                if hasattr(policy, "predict_action_chunk"):
+                    chunk = policy.predict_action_chunk(inp)
+                    pred = chunk[:, 0, :]
+                else:
+                    out = policy.select_action(inp)
+                    pred = out[:, 0, :] if out.ndim == 3 else out
+                gt = batch.get("action")
+                if isinstance(gt, torch.Tensor):
+                    # Align GT to first-step action shape when sequences are provided (B, S, A)
+                    if gt.ndim == 3:
+                        gt = gt[:, 0, :]
+                    preds.append(pred.detach().cpu())
+                    gts.append(gt.detach().cpu())
+    else:
+        with torch.no_grad():
+            for idx in indices:
+                sample = get_sample(idx)
+                inp = {}
+                for key, val in sample.items():
+                    if key.startswith("observation.") and isinstance(val, torch.Tensor):
+                        inp[key] = val.unsqueeze(0).to(device)
+                if not inp:
+                    continue
+                if hasattr(policy, "predict_action_chunk"):
+                    pred_chunk = policy.predict_action_chunk(inp)
+                    pred = pred_chunk[:, 0, :]
+                else:
+                    pred = policy.select_action(inp)
+                gt = sample.get("action")
+                if isinstance(gt, torch.Tensor):
+                    if gt.ndim == 1:
+                        gt = gt.unsqueeze(0)
+                    preds.append(pred[0].detach().cpu())
+                    gts.append(gt[0].detach().cpu())
+
+    if len(preds) == 0:
+        return float("nan"), None, None, None
+
+    # Concatenate mini-batches when using batched path
+    if isinstance(preds[0], torch.Tensor) and preds[0].dim() == 2:
+        preds_t = torch.cat(preds, dim=0)
+        gts_t = torch.cat(gts, dim=0)
+    else:
+        preds_t = torch.stack(preds, dim=0)
+        gts_t = torch.stack(gts, dim=0)
+    per_joint_mae_t = torch.mean(torch.abs(preds_t - gts_t), dim=0)
+    overall_mae = float(torch.mean(per_joint_mae_t).item())
+    per_joint_mae = per_joint_mae_t.tolist()
+
+    # Plot if matplotlib available
+    if plt is not None:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        num_joints = preds_t.shape[1]
+        # Share x-axis to keep time aligned; annotate overall MAE in suptitle
+        fig, axes = plt.subplots(num_joints, 1, figsize=(11, max(2.5, 2.2 * num_joints)), sharex=True)
+        if num_joints == 1:
+            axes = [axes]
+        xs = np.arange(preds_t.shape[0])
+        for j in range(num_joints):
+            ax = axes[j]
+            ax.plot(xs, gts_t[:, j].numpy(), label="GT", color="#d62728", linestyle="--", linewidth=1.5)
+            ax.plot(xs, preds_t[:, j].numpy(), label="Pred", color="#1f77b4", linewidth=1.5)
+            ax.set_ylabel(f"Dim {j}")
+            ax.grid(True, alpha=0.25)
+            # Per-joint MAE in the corner
+            ax.text(0.01, 0.92, f"MAE={per_joint_mae[j]:.4f}", transform=ax.transAxes, fontsize=9,
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, linewidth=0.5))
+            if j == 0:
+                ax.legend(loc="best")
+        axes[-1].set_xlabel("Time Step")
+        fig.suptitle(f"Pred vs GT (Episode 0)  Overall MAE={overall_mae:.4f}")
+        fig.tight_layout(rect=(0, 0, 1, 0.97))
+        fig.savefig(out_path, dpi=160)
+        plt.close(fig)
+
+    return overall_mae, per_joint_mae, preds_t.numpy(), gts_t.numpy()
+
+
 @parser.wrap()
 def train(cfg: TrainPipelineConfig):
     cfg.validate()
     logging.info(pformat(cfg.to_dict()))
+
+    # Silence torchvision video deprecation spam
+    import warnings as _warnings
+    _warnings.filterwarnings(
+        "ignore",
+        message="The video decoding and encoding capabilities of torchvision are deprecated",
+    )
 
     if cfg.wandb.enable and cfg.wandb.project:
         wandb_logger = WandBLogger(cfg)
@@ -247,15 +367,15 @@ def train(cfg: TrainPipelineConfig):
     val_dataset = None
     if getattr(cfg.dataset, "val_episodes", None) or getattr(cfg.dataset, "val_repo_id", None):
         # Make a shallow copy of cfg to reuse dataset factory for val episodes
-        from copy import deepcopy
         val_cfg = deepcopy(cfg)
         if getattr(cfg.dataset, "val_repo_id", None):
             val_cfg.dataset.repo_id = cfg.dataset.val_repo_id
-            val_cfg.dataset.episodes = cfg.dataset.val_episodes
+            val_cfg.dataset.episodes = cfg.dataset.val_episodes or [0]
+            val_dataset = make_dataset(val_cfg)
         else:
             val_cfg.dataset.episodes = cfg.dataset.val_episodes
-        # Ensure transforms/stats match train dataset
-        val_dataset = make_dataset(val_cfg)
+            # Ensure transforms/stats match train dataset
+            val_dataset = make_dataset(val_cfg)
 
     # Create environment used for evaluating checkpoints during training on simulation data.
     # On real-world data, no need to create an environment as evaluations are done outside train.py,
@@ -369,7 +489,8 @@ def train(cfg: TrainPipelineConfig):
                 wandb_log_dict = train_tracker.to_dict()
                 if output_dict:
                     wandb_log_dict.update(output_dict)
-                wandb_logger.log_dict(wandb_log_dict, step)
+                # Log using samples as the custom step key to enable W&B x-axis as "num samples seen"
+                wandb_logger.log_dict(wandb_log_dict, custom_step_key="samples")
             train_tracker.reset_averages()
         elif is_log_step:
             logging.info(train_tracker)
@@ -377,7 +498,8 @@ def train(cfg: TrainPipelineConfig):
                 wandb_log_dict = train_tracker.to_dict()
                 if output_dict:
                     wandb_log_dict.update(output_dict)
-                wandb_logger.log_dict(wandb_log_dict, step)
+                # Log using samples as the custom step key to enable W&B x-axis as "num samples seen"
+                wandb_logger.log_dict(wandb_log_dict, custom_step_key="samples")
             train_tracker.reset_averages()
 
         if cfg.save_checkpoint and is_saving_step:
@@ -385,23 +507,9 @@ def train(cfg: TrainPipelineConfig):
             checkpoint_dir = get_step_checkpoint_dir(cfg.output_dir, cfg.steps, step)
             save_checkpoint(checkpoint_dir, step, cfg, policy, optimizer, lr_scheduler)
             update_last_checkpoint(checkpoint_dir)
-            if wandb_logger:
-                wandb_logger.log_policy(checkpoint_dir)
 
-            # Offline validation on held-out episodes
-            if val_dataset is not None:
-                val_loss = _compute_offline_val_loss(policy, val_dataset, device, cfg.batch_size, cfg.num_workers)
-                logging.info(colored("Validation:", "yellow", attrs=["bold"]) + f" loss={val_loss:.6f}")
-                if wandb_logger:
-                    wandb_logger.log_dict({"val_loss": val_loss}, step)
-                # Plot trajectories once per saving step
-                try:
-                    png_path = cfg.output_dir / "val_plots" / f"traj_step_{get_step_identifier(step, cfg.steps)}.png"
-                    _plot_action_state_trajectories(policy, val_dataset, device, png_path)
-                    if wandb_logger and png_path.exists():
-                        wandb_logger.log_image(str(png_path), step, mode="eval", caption="val_trajectories")
-                except Exception as e:
-                    logging.warning(f"Failed to plot validation trajectories: {e}")
+            # if wandb_logger:
+                # wandb_logger.log_policy(checkpoint_dir)
 
             # Optionally push this checkpoint (weights + training_state) to the Hugging Face Hub
             if cfg.policy.push_to_hub and cfg.policy.repo_id:
@@ -410,68 +518,79 @@ def train(cfg: TrainPipelineConfig):
                     repo_id_with_step = f"{cfg.policy.repo_id}_{step_id}"
                     api = HfApi()
                     created = api.create_repo(repo_id=repo_id_with_step, private=cfg.policy.private, exist_ok=True)
-                    pretrained_dir = checkpoint_dir / "pretrained_model"
-                    training_state_dir = checkpoint_dir / "training_state"
-                    # Upload pretrained model (weights + config) at repo root for easy loading
+
+                    # Upload the entire checkpoint directory so the repo contains both
+                    # 'pretrained_model/' and 'training_state/' at its root.
                     api.upload_folder(
                         repo_id=created.repo_id,
+                        # TODO double check that this is still loadable in the same way?? 
                         repo_type="model",
-                        folder_path=pretrained_dir,
-                        commit_message=f"Upload checkpoint {step_id} pretrained_model",
+                        folder_path=str(checkpoint_dir),
+                        commit_message=f"Upload full checkpoint {step_id}",
                         allow_patterns=["*.safetensors", "*.json"],
                         ignore_patterns=["*.tmp", "*.log"],
                     )
-                    # Also upload training_state to enable true resume across machines
-                    if training_state_dir.exists():
-                        api.upload_folder(
-                            repo_id=created.repo_id,
-                            repo_type="model",
-                            folder_path=training_state_dir,
-                            path_in_repo="training_state",
-                            commit_message=f"Upload checkpoint {step_id} training_state",
-                            allow_patterns=["*.json", "*.safetensors"],
-                            ignore_patterns=["*.tmp", "*.log"],
-                        )
-                    # TODO does it work for single datasets? gpt5 thought it was fixed but was it?
-                    # Log the model URL of the created repo
-                    # logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created.repo_url.url}")
-                    logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created.repo_url}")
+                    # Log the model URL robustly
+                    created_url = getattr(created, "repo_url", getattr(created, "url", getattr(created, "repo_id", str(created))))
+                    logging.info(colored("Pushed checkpoint to Hub:", "yellow", attrs=["bold"]) + f" {created_url}")
                 except Exception as e:
                     logging.warning(f"Failed to push checkpoint {step} to Hugging Face Hub: {e}")
-
-
-        if cfg.env and is_eval_step:
+        
+        # TODO below is robot eval, have another for val step on validation episode and on episode 0 to see overfitting. or just hack the below
+        if is_eval_step:
             step_id = get_step_identifier(step, cfg.steps)
-            logging.info(f"Eval policy at step {step}")
+            logging.info(f"Validate policy at step {step} ({step/1000.0:.1f}K)")
             with (
                 torch.no_grad(),
                 torch.autocast(device_type=device.type) if cfg.policy.use_amp else nullcontext(),
             ):
-                eval_info = eval_policy(
-                    eval_env,
-                    policy,
-                    cfg.eval.n_episodes,
-                    videos_dir=cfg.output_dir / "eval" / f"videos_step_{step_id}",
-                    max_episodes_rendered=4,
-                    start_seed=cfg.seed,
-                )
+                # Always compute MAE on training episode 0
+                try:
+                    t_tr0 = time.perf_counter()
+                    train_mae_png = cfg.output_dir / "train_plots" / f"mae_train_ep0_step_{get_step_identifier(step, cfg.steps)}.png"
+                    train_overall_mae, _, _, _ = _evaluate_mae_on_episode(
+                        policy, dataset, episode_idx=0, device=device, out_path=train_mae_png
+                    )
+                    logging.info(colored("Train MAE ep0:", "yellow", attrs=["bold"]) + f" mae={train_overall_mae:.6f}")
+                    if wandb_logger:
+                        log_dict = {"train/mae_ep0": train_overall_mae}
+                        wandb_logger.log_dict(log_dict, step)
+                        if train_mae_png.exists():
+                            wandb_logger.log_named_image("train_mae_ep0_plot", str(train_mae_png), step, mode="train", caption=f"train mae ep0 step {step}")
+                    t_tr1 = time.perf_counter()
+                    logging.info(f"timing_s: mae(train_ep0)={t_tr1 - t_tr0:.2f}")
+                except Exception as e:
+                    logging.warning(f"Failed to compute/log TRAIN MAE ep0: {e}")
 
-            eval_metrics = {
-                "avg_sum_reward": AverageMeter("∑rwrd", ":.3f"),
-                "pc_success": AverageMeter("success", ":.1f"),
-                "eval_s": AverageMeter("eval_s", ":.3f"),
-            }
-            eval_tracker = MetricsTracker(
-                cfg.batch_size, dataset.num_frames, dataset.num_episodes, eval_metrics, initial_step=step
-            )
-            eval_tracker.eval_s = eval_info["aggregated"].pop("eval_s")
-            eval_tracker.avg_sum_reward = eval_info["aggregated"].pop("avg_sum_reward")
-            eval_tracker.pc_success = eval_info["aggregated"].pop("pc_success")
-            logging.info(eval_tracker)
-            if wandb_logger:
-                wandb_log_dict = {**eval_tracker.to_dict(), **eval_info}
-                wandb_logger.log_dict(wandb_log_dict, step, mode="eval")
-                wandb_logger.log_video(eval_info["video_paths"][0], step, mode="eval")
+                # Offline validation on held-out episodes
+                if val_dataset is not None:
+                    t0 = time.perf_counter()
+                    val_loss = _compute_offline_val_loss(policy, val_dataset, device, cfg.batch_size, cfg.num_workers)
+                    logging.info(colored("Validation:", "yellow", attrs=["bold"]) + f" loss={val_loss:.6f}")
+                    if wandb_logger:
+                        wandb_logger.log_dict({"val_loss": val_loss}, step)
+                    # Compute MAE on episode 0 of validation and log + plot
+                    try:
+                        t1 = time.perf_counter()
+                        mae_png = cfg.output_dir / "val_plots" / f"mae_ep0_step_{get_step_identifier(step, cfg.steps)}.png"
+                        overall_mae, per_joint_mae, preds_np, gt_np = _evaluate_mae_on_episode(
+                            policy, val_dataset, episode_idx=0, device=device, out_path=mae_png
+                        )
+                        logging.info(colored("Val MAE ep0:", "yellow", attrs=["bold"]) + f" mae={overall_mae:.6f}")
+                        if wandb_logger:
+                            log_dict = {"val/mae_ep0": overall_mae}
+                            if per_joint_mae is not None:
+                                for j, v in enumerate(per_joint_mae):
+                                    log_dict[f"val/mae_ep0_joint_{j}"] = float(v)
+                            wandb_logger.log_dict(log_dict, step)
+                            if mae_png.exists():
+                                wandb_logger.log_named_image("val_mae_ep0_plot", str(mae_png), step, mode="eval", caption=f"val mae ep0 step {step}")
+                        # Only MAE timing printed
+                        t2 = time.perf_counter()
+                        logging.info(f"val_timing_s: loss={t1 - t0:.2f} mae={t2 - t1:.2f} total={t2 - t0:.2f}")
+                    except Exception as e:
+                        logging.warning(f"Failed to compute/log MAE ep0: {e}")
+
 
     if eval_env:
         eval_env.close()

@@ -1,0 +1,68 @@
+program: /teamspace/studios/this_studio/lerobot/src/lerobot/scripts/train.py
+method: grid
+name: act_lr_bs_10k
+project: lerobot
+entity: benfduffy-bearcover-gmbh
+metric:
+  name: train/loss
+  goal: minimize
+parameters:
+  target_samples:
+    value: 3200
+  log_freq:
+    value: 200
+  eval_freq:
+    value: 0
+  save_checkpoint:
+    value: true
+  save_freq:
+    value: 2500
+  use_policy_training_preset:
+    value: true
+  num_workers:
+    value: 8
+  batch_size:
+    values: [4, 8, 16, 32, 64]
+  base_lr:
+    value: 3.0e-5
+  base_bs:
+    value: 8
+  lr_scale:
+    values: [0.5, 1.0, 2.0]
+  backbone_lr_scale:
+    values: [1.0]
+  policy.type:
+    value: act
+  policy.use_amp:
+    values: [true]
+  policy.device:
+    value: cuda
+  policy.push_to_hub:
+    value: false
+  # Let train.py compute scaled LRs; don't override directly
+  policy.optimizer_lr:
+    value: null
+  policy.optimizer_lr_backbone:
+    value: null
+  dataset.repo_id:
+    value: '["bearlover365/pick_place_one_white_sock_black_out_blinds","bearlover365/pick_place_up_to_four_white_socks_black_out_blinds"]'
+  dataset.video_backend:
+    value: pyav
+  dataset.image_transforms.enable:
+    value: true
+  dataset.image_transforms.max_num_transforms:
+    value: 2
+  dataset.image_transforms.random_order:
+    value: false
+  dataset.image_transforms.tfs:
+    value: '{"crop":{"type":"CenterCrop","kwargs":{"size":[320,320]}},"resize":{"type":"Resize","kwargs":{"size":[224,224]}}}'
+  dataset.use_imagenet_stats:
+    value: true
+command:
+  - ${env}
+  - python
+  - ${program}
+  - --resume=false
+  - --wandb.enable=true
+  - ${args}
+

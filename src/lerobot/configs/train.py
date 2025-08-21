@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import draccus
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, snapshot_download
 from huggingface_hub.errors import HfHubHTTPError
 
 from lerobot import envs
@@ -53,6 +53,9 @@ class TrainPipelineConfig(HubMixin):
     num_workers: int = 4
     batch_size: int = 8
     steps: int = 100_000
+    # Optional: ensure fairness across batch sizes by targeting a fixed number of samples seen
+    # If set, effective steps will be computed as ceil(target_samples / batch_size)
+    target_samples: int | None = None
     # eval_freq: int = 20_000 
     eval_freq: int = 10_000 
     log_freq: int = 200
@@ -80,26 +83,78 @@ class TrainPipelineConfig(HubMixin):
             self.policy = PreTrainedConfig.from_pretrained(policy_path, cli_overrides=cli_overrides)
             self.policy.pretrained_path = policy_path
         elif self.resume:
-            # The entire train config is already loaded, we just need to get the checkpoint dir
+            # Support both local resume with --config_path and Hub-based resume via --policy.path=<repo or dir>
             config_path = parser.parse_arg("config_path")
-            if not config_path:
-                raise ValueError(
-                    f"A config_path is expected when resuming a run. Please specify path to {TRAIN_CONFIG_NAME}"
-                )
-            if not Path(config_path).resolve().exists():
-                raise NotADirectoryError(
-                    f"{config_path=} is expected to be a local path. "
-                    "Resuming from the hub is not supported for now."
-                )
-            policy_path = Path(config_path).parent
-            self.policy.pretrained_path = policy_path
-            self.checkpoint_path = policy_path.parent
+            if config_path and Path(config_path).resolve().exists():
+                policy_path = Path(config_path).parent
+                self.policy.pretrained_path = policy_path
+                self.checkpoint_path = policy_path.parent
+            else:
+                # Attempt to resume from a Hub repo or a local directory specified by --policy.path
+                policy_arg = parser.get_path_arg("policy")
+                if not policy_arg:
+                    raise ValueError(
+                        "When resuming without a local --config_path, please specify --policy.path=<hf_repo_id or local_dir>"
+                    )
+                policy_arg_str = str(policy_arg)
+                # If it's a local directory, use it as the checkpoint root; otherwise snapshot the repo
+                if Path(policy_arg_str).exists():
+                    snapshot_dir = Path(policy_arg_str)
+                else:
+                    snapshot_dir = Path(snapshot_download(repo_id=policy_arg_str))
+
+                # Determine where the pretrained model lives
+                pretrained_dir = snapshot_dir / "pretrained_model"
+                if not pretrained_dir.is_dir():
+                    # Fallback: assume snapshot root is the pretrained dir
+                    pretrained_dir = snapshot_dir
+
+                # Ensure a train config exists for the policy config
+                tc_root = pretrained_dir / TRAIN_CONFIG_NAME
+                if not tc_root.exists():
+                    # Try to fetch train_config at repo root if not present under pretrained_model
+                    try:
+                        _ = hf_hub_download(repo_id=policy_arg_str, filename=TRAIN_CONFIG_NAME)
+                    except Exception as e:
+                        # Not fatal; policy config can still be loaded from config.json
+                        pass
+
+                self.policy.pretrained_path = pretrained_dir
+                # load_training_state expects checkpoint_path to contain 'training_state/'
+                self.checkpoint_path = snapshot_dir
 
         if not self.job_name:
             if self.env is None:
                 self.job_name = f"{self.policy.type}"
             else:
                 self.job_name = f"{self.env.type}_{self.policy.type}"
+
+        # Derive effective steps from target_samples if provided
+        if self.target_samples is not None and self.batch_size > 0:
+            # Delay math import to avoid global import churn
+            import math as _math
+            self.steps = int(_math.ceil(self.target_samples / self.batch_size))
+
+        # Enrich job name with key hyperparameters for easier comparison in W&B
+        try:
+            lr = getattr(self.policy, "optimizer_lr", None)
+            lr_bb = getattr(self.policy, "optimizer_lr_backbone", None)
+            def _fmt(v):
+                try:
+                    return f"{float(v):.1e}"
+                except Exception:
+                    return str(v)
+            smp = self.target_samples if self.target_samples is not None else self.steps * self.batch_size
+            # Include sweep id if present
+            import os as _os
+            sid = _os.environ.get("WANDB_SWEEP_ID")
+            sid_part = f"_swp{sid[:8]}" if sid else ""
+            self.job_name = (
+                f"{self.job_name}{sid_part}_bs{self.batch_size}"
+                f"_lr{_fmt(lr)}_bblr{_fmt(lr_bb)}_smp{smp}"
+            )
+        except Exception:
+            pass
 
         if not self.resume and isinstance(self.output_dir, Path) and self.output_dir.is_dir():
             raise FileExistsError(
