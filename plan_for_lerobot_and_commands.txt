@@ -754,6 +754,24 @@ python -m lerobot.record \
   --resume=false \
   --display_data=true
 
+py310
+export EVAL_ROOT="$HOME/.cache/lerobot_local/eval_${task_name}"
+full_model_path="bearlover365/d2_original_good_act_1_act_model_130000"
+task_name="d2_original_good_act_1_act_model"
+python -m lerobot.record \
+  --robot.type=so101_follower \
+  --robot.port=/dev/ttyACM0 \
+  --robot.id=my_awesome_follower_arm \
+  --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+  --policy.path=${full_model_path} \
+  --dataset.repo_id=bearlover365/eval_${task_name} \
+  --dataset.root="$EVAL_ROOT" \
+  --dataset.single_task="Grab all socks and place into your box" \
+  --dataset.num_episodes=1 \
+  --dataset.push_to_hub=false \
+  --resume=false \
+  --display_data=true
+
 # TODO I think it says it while recording? make sure cpu has enough speed to implement GPU model! profile!
 # TODO never tried replay just to test repeatability.
 
@@ -861,6 +879,10 @@ https://docs.wandb.ai/guides/sweeps/define-sweep-configuration/?utm_source=chatg
 https://lightning.ai/docs/overview/scale-with-batch-jobs/CLI?utm_source=chatgpt.com
 
 
+
+# lightning upload files between studios
+swapped from gcp to aws so i could run L40s and do 150k steps in 2 hours
+lightning upload folder outputs/train/d2_original_good_act_1 --remote-path lerobot/outputs/train/d2_original_good_act_1
 
 from lightning docs WOOOOOOW
 # Install the Lightning SDK
