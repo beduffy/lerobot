@@ -3,7 +3,8 @@ set -euo pipefail
 
 # Resume the D2 run exactly from the 70k checkpoint with the correct W&B run id
 
-CHECKPOINT_DIR="/teamspace/studios/this_studio/lerobot/outputs/train/d2_original_good_act_1/checkpoints/070000"
+# CHECKPOINT_DIR="/teamspace/studios/this_studio/lerobot/outputs/train/d2_original_good_act_1/checkpoints/070000"
+CHECKPOINT_DIR="/teamspace/studios/this_studio/lerobot/outputs/train/d2_original_good_act_1/checkpoints/130000"
 PRETRAINED_DIR="$CHECKPOINT_DIR/pretrained_model"
 CFG="$PRETRAINED_DIR/train_config.json"
 
@@ -50,6 +51,8 @@ python -m lerobot.scripts.train \
   --wandb.project="$WB_PROJECT" \
   --wandb.entity="$WB_ENTITY" \
   --wandb.run_id="$WB_RUN_ID" \
-  --eval_freq=1000
+  --steps=400000 \
+  --eval_freq=5000 \
+  --save_freq=20000
 
 
