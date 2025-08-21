@@ -97,7 +97,8 @@ class LeRobotDatasetMetadata:
                 self.revision = get_safe_version(self.repo_id, self.revision)
 
             (self.root / "meta").mkdir(exist_ok=True, parents=True)
-            self.pull_from_repo(allow_patterns="meta/")
+            # Download all metadata files; use a recursive pattern
+            self.pull_from_repo(allow_patterns="meta/**")
             self.load_metadata()
 
     def load_metadata(self):
@@ -577,9 +578,14 @@ class LeRobotDataset(torch.utils.data.Dataset):
         files = None
         ignore_patterns = None if download_videos else "videos/"
         if self.episodes is not None:
-            files = self.get_episodes_file_paths()
-
-        self.pull_from_repo(allow_patterns=files, ignore_patterns=ignore_patterns)
+            # For robustness across Hub backends, prefer recursive patterns when selecting specific episodes.
+            # This may download all data files, but ensures presence in local cache for validation.
+            allow_patterns = ["data/**"]
+            if download_videos:
+                allow_patterns.append("videos/**")
+            self.pull_from_repo(allow_patterns=allow_patterns, ignore_patterns=None)
+        else:
+            self.pull_from_repo(allow_patterns=files, ignore_patterns=ignore_patterns)
 
     def get_episodes_file_paths(self) -> list[Path]:
         episodes = self.episodes if self.episodes is not None else list(range(self.meta.total_episodes))

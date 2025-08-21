@@ -735,18 +735,35 @@ python -m lerobot.record \
 export HF_USER=bearlover365
 export task_name="d1_d2_act224_s500k_b8_ckpt25k"
 export EVAL_ROOT="$HOME/.cache/lerobot_local/eval_${task_name}"
-
 # Optional: ensure a clean slate locally
 rm -rf "$EVAL_ROOT"
-
+model_step_number=250000
 # Run record WITHOUT --resume and with push_to_hub=false
 python -m lerobot.record \
   --robot.type=so101_follower \
   --robot.port=/dev/ttyACM0 \
   --robot.id=my_awesome_follower_arm \
   --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
-  --policy.path=${HF_USER}/${task_name}_150000 \
+  --policy.path=${HF_USER}/${task_name}_${model_step_number} \
   --dataset.repo_id=${HF_USER}/eval_${task_name} \
+  --dataset.root="$EVAL_ROOT" \
+  --dataset.single_task="Grab all socks and place into your box" \
+  --dataset.num_episodes=1 \
+  --dataset.push_to_hub=false \
+  --resume=false \
+  --display_data=true
+
+py310
+export EVAL_ROOT="$HOME/.cache/lerobot_local/eval_${task_name}"
+full_model_path="bearlover365/d2_original_good_act_1_act_model_130000"
+task_name="d2_original_good_act_1_act_model"
+python -m lerobot.record \
+  --robot.type=so101_follower \
+  --robot.port=/dev/ttyACM0 \
+  --robot.id=my_awesome_follower_arm \
+  --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
+  --policy.path=${full_model_path} \
+  --dataset.repo_id=bearlover365/eval_${task_name} \
   --dataset.root="$EVAL_ROOT" \
   --dataset.single_task="Grab all socks and place into your box" \
   --dataset.num_episodes=1 \
@@ -861,6 +878,10 @@ https://docs.wandb.ai/guides/sweeps/define-sweep-configuration/?utm_source=chatg
 https://lightning.ai/docs/overview/scale-with-batch-jobs/CLI?utm_source=chatgpt.com
 
 
+
+# lightning upload files between studios
+swapped from gcp to aws so i could run L40s and do 150k steps in 2 hours
+lightning upload folder outputs/train/d2_original_good_act_1 --remote-path lerobot/outputs/train/d2_original_good_act_1
 
 from lightning docs WOOOOOOW
 # Install the Lightning SDK
@@ -1100,7 +1121,7 @@ pip install -e .
 
 Datasets (10-200 demos each?): 
 1. 10-100 demos of Fixed robot facing white wall, blackout blinds, overhead light, only 1 white sock in many positions 
-2. Fixed robot facing white wall, blackout blinds, overhead light, 1-4 slightly different white socks in many positions. DONE recording, actually did lots of fails and retries and couldn't reach to the right. And tried looking around and picking up multiple socks too. took 75 minutes probably. 
+2. Fixed robot facing white wall, blackout blinds, overhead light, 1-4 slightly different white socks in many positions. DONE recording, actually did lots of fails and retries and couldn't reach to the right. And tried looking around and picking up multiple socks too. took 75 minutes probably. 51 demos. num_frames=83031 
 3. same as above but using my funky lamp which is changing colours a lot (not really a realistic scenario of normal but trains the model to focus on the correct thing?) 
 4. same as above but no flashy lights or overhead light, this time daylight with blackout blinds up. Also try different amounts of daylight for different episodes. 
 5. blackout blinds down, but many different socks, big ones small ones, many different colours and up to 10 of them. 
