@@ -1,4 +1,5 @@
 import os, shutil, json, numpy as np
+import argparse
 from pathlib import Path
 from huggingface_hub import HfApi
 from datasets import load_dataset, Dataset, Features, Value, Array3D, Array2D, Sequence, Image
@@ -29,7 +30,41 @@ def extract_episode(ds, ep_idx):
     indices = np.nonzero(np.stack(ds.hf_dataset["episode_index"])==ep_idx)[0]
     return ds.hf_dataset.select(indices)
 
-def assemble_split(ds, split_eps, out_dir: Path, out_repo):
+def verify_output(out_dir: Path):
+    """Quick self-check that the split dataset is internally consistent."""
+    info_path = out_dir / INFO_PATH
+    episodes_path = out_dir / EPISODES_PATH
+    if not info_path.is_file():
+        raise RuntimeError(f"Missing info.json at {info_path}")
+    if not episodes_path.is_file():
+        raise RuntimeError(f"Missing episodes.jsonl at {episodes_path}")
+
+    info = json.loads(info_path.read_text())
+    total_frames_from_parquet = 0
+    for ep_idx in range(info["total_episodes"]):
+        chunk = ep_idx // info["chunks_size"]
+        ep_path = out_dir / f"data/chunk-{chunk:03d}/episode_{ep_idx:06d}.parquet"
+        if not ep_path.is_file():
+            raise RuntimeError(f"Missing parquet for episode {ep_idx}: {ep_path}")
+        ep_ds = load_dataset("parquet", data_files=str(ep_path), split="train")
+        n = len(ep_ds)
+        total_frames_from_parquet += n
+        if "episode_index" in ep_ds.column_names:
+            unique_eps = set(ep_ds["episode_index"]) if n > 0 else {ep_idx}
+            if unique_eps != {ep_idx}:
+                raise RuntimeError(f"episode_index values mismatch in {ep_path}: {unique_eps}")
+        if "index" in ep_ds.column_names and n > 0:
+            idxs = ep_ds["index"]
+            if any(b - a != 1 for a, b in zip(idxs, idxs[1:])):
+                raise RuntimeError(f"index column not continuous in {ep_path}")
+
+    if total_frames_from_parquet != info["total_frames"]:
+        raise RuntimeError(
+            f"total_frames mismatch: info={info['total_frames']} vs parquet={total_frames_from_parquet}"
+        )
+
+
+def assemble_split(ds, split_eps, out_dir: Path, out_repo, dry_run: bool = False, skip_videos: bool = False, verify: bool = True):
     out_dir.mkdir(parents=True, exist_ok=True)
     # Write meta/info with updated counts
     info = json.loads((ds.meta.root / INFO_PATH).read_text())
@@ -83,7 +118,7 @@ def assemble_split(ds, split_eps, out_dir: Path, out_repo):
         ep_out.to_parquet(ep_path)
 
     # videos: copy and rename per episode (optional; if you rely on videos)
-    if info.get("video_path"):
+    if info.get("video_path") and not skip_videos:
         for new_idx, old_idx in enumerate(split_eps):
             for vid_key in ds.meta.video_keys:
                 src = ds.meta.root / ds.meta.get_video_file_path(old_idx, vid_key)
@@ -94,14 +129,33 @@ def assemble_split(ds, split_eps, out_dir: Path, out_repo):
                 if src.is_file():
                     shutil.copyfile(src, dst)
 
+    if verify:
+        verify_output(out_dir)
+
     # push to hub
-    api = HfApi()
-    api.create_repo(repo_id=out_repo, private=True, repo_type="dataset", exist_ok=True)
-    api.upload_folder(repo_id=out_repo, folder_path=str(out_dir), repo_type="dataset",
-                      allow_patterns=["**"], ignore_patterns=["*.tmp","*.log"])
+    if not dry_run:
+        api = HfApi()
+        api.create_repo(repo_id=out_repo, private=True, repo_type="dataset", exist_ok=True)
+        api.upload_folder(repo_id=out_repo, folder_path=str(out_dir), repo_type="dataset",
+                          allow_patterns=["**"], ignore_patterns=["*.tmp","*.log"])
 
 def main():
-    ds = load_src()
+    global SOURCE_REPO, HELDOUT, TRAIN_REPO, VAL_REPO
+    parser = argparse.ArgumentParser(description="Split a LeRobot dataset by episodes")
+    parser.add_argument("--source_repo", type=str, default=SOURCE_REPO)
+    parser.add_argument("--heldout", type=str, default=",".join(map(str, HELDOUT)), help="Comma-separated 0-based episode indices for validation")
+    parser.add_argument("--train_repo", type=str, default=TRAIN_REPO)
+    parser.add_argument("--val_repo", type=str, default=VAL_REPO)
+    parser.add_argument("--dry-run", action="store_true", help="Do not push to HF; only write locally and verify")
+    parser.add_argument("--skip-videos", action="store_true", help="Skip copying videos to speed up local checks")
+    args = parser.parse_args()
+
+    SOURCE_REPO = args.source_repo
+    HELDOUT = [int(x) for x in args.heldout.split(",") if x != ""]
+    TRAIN_REPO = args.train_repo
+    VAL_REPO = args.val_repo
+
+    ds = LeRobotDataset(SOURCE_REPO, download_videos=not args.skip_videos)
     all_eps = sorted(ds.meta.episodes.keys())
     val_eps = sorted(HELDOUT)
     train_eps = [e for e in all_eps if e not in val_eps]
@@ -110,7 +164,9 @@ def main():
     val_dir = home / VAL_REPO
     if train_dir.exists(): shutil.rmtree(train_dir)
     if val_dir.exists(): shutil.rmtree(val_dir)
-    assemble_split(ds, train_eps, train_dir, TRAIN_REPO)
-    assemble_split(ds, val_eps, val_dir, VAL_REPO)
+    assemble_split(ds, train_eps, train_dir, TRAIN_REPO, dry_run=args.dry_run, skip_videos=args.skip_videos, verify=True)
+    assemble_split(ds, val_eps, val_dir, VAL_REPO, dry_run=args.dry_run, skip_videos=args.skip_videos, verify=True)
     print("Done.")
-main()
+
+if __name__ == "__main__":
+    main()
