@@ -1120,14 +1120,19 @@ pip install -e .
 ########################
 
 Datasets (10-200 demos each?): 
-1. 10-100 demos of Fixed robot facing white wall, blackout blinds, overhead light, only 1 white sock in many positions 
-2. Fixed robot facing white wall, blackout blinds, overhead light, 1-4 slightly different white socks in many positions. DONE recording, actually did lots of fails and retries and couldn't reach to the right. And tried looking around and picking up multiple socks too. took 75 minutes probably. 51 demos. num_frames=83031 
-3. same as above but using my funky lamp which is changing colours a lot (not really a realistic scenario of normal but trains the model to focus on the correct thing?) 
-4. same as above but no flashy lights or overhead light, this time daylight with blackout blinds up. Also try different amounts of daylight for different episodes. 
-5. blackout blinds down, but many different socks, big ones small ones, many different colours and up to 10 of them. 
-6. Same as above but daylight. 
-7. Then start moving the platform to many different places in my room, with sometimes daylight and sometimes blackout blinds (or two different datasets for this?). MANY DIFFERENT POSITIONS, needs way more data, maybe 500 episodes? 
-8. Then start moving to entire apartment. Hopefully with enough training of the above, the model has learned to not really care about the background/environment and more learned what socks look like and what it looks like to have a succesful grasp. No? How much will background screw me? I want to find a way to quantify this and find tricks to need less data. Maybe I can do 1 room at a time and see how 1 extra room helps.
+DONE.
+D1. 51 demos (0-50) of Fixed robot facing white wall, blackout blinds, overhead light, only 1 white sock in many positions. Mostly looking at rerun rather than the robot to make it harder and more interesting. 
+bearlover365/pick_place_one_white_sock_black_out_blinds
+D2. 51 demos of Fixed robot facing white wall, blackout blinds, overhead light, 1-4 slightly different white socks in many positions. More details: recording, actually did lots of fails and retries and couldn't reach to the right. And tried looking around and picking up multiple socks too. took 75 minutes probably. 51 demos. num_frames=83031 
+bearlover365/pick_place_up_to_four_white_socks_black_out_blinds
+
+To be recorded:
+D3. same as above but using my funky lamp which is changing colours a lot (not really a realistic scenario of normal but trains the model to focus on the correct thing?) 
+D4. same as above but no flashy lights or overhead light, this time daylight with blackout blinds up. Also try different amounts of daylight for different episodes. 
+D5. blackout blinds down, but many different socks, big ones small ones, many different colours and up to 10 of them. 
+D6. Same as above but daylight. 
+D7. Then start moving the platform to many different places in my room, with sometimes daylight and sometimes blackout blinds (or two different datasets for this?). MANY DIFFERENT POSITIONS, needs way more data, maybe 500 episodes? 
+D8. Then start moving to entire apartment. Hopefully with enough training of the above, the model has learned to not really care about the background/environment and more learned what socks look like and what it looks like to have a succesful grasp. No? How much will background screw me? I want to find a way to quantify this and find tricks to need less data. Maybe I can do 1 room at a time and see how 1 extra room helps.
 
 
 
