@@ -13,6 +13,7 @@ from lerobot.datasets.utils import (
   write_json, write_jsonlines, write_episode_stats, load_stats, write_stats,
   get_hf_features_from_features
 )
+from lerobot.datasets.compute_stats import aggregate_stats
 
 
 def read_tasks(meta_root: Path) -> Tuple[List[str], Dict[int, str]]:
@@ -158,9 +159,11 @@ def merge_datasets(first_repo: str, second_repo: str, out_repo: str, out_dir: Pa
     # Build task remap
     first_map, second_map, merged_tasks = build_merged_task_map(first.meta.root, second.meta.root)
 
-    # Write tasks.jsonl
+    # Write tasks.jsonl with required schema
     if merged_tasks:
-        write_jsonlines([{"task": t} for t in merged_tasks], out_dir / TASKS_PATH)
+        write_jsonlines([
+            {"task_index": idx, "task": t} for idx, t in enumerate(merged_tasks)
+        ], out_dir / TASKS_PATH)
 
     # Prepare episodes.jsonl and stats
     new_episodes = []
@@ -224,9 +227,15 @@ def merge_datasets(first_repo: str, second_repo: str, out_repo: str, out_dir: Pa
     # Write episodes.jsonl
     write_jsonlines(new_episodes, out_dir / EPISODES_PATH)
 
-    # Stats: prefer aggregate from first if available
-    stats = load_stats(first.meta.root) or first.meta.stats
-    write_stats(stats, out_dir)
+    # Stats: aggregate from both datasets if available for best normalization
+    stats_first = load_stats(first.meta.root) or getattr(first.meta, "stats", None)
+    stats_second = load_stats(second.meta.root) or getattr(second.meta, "stats", None)
+    if stats_first is not None and stats_second is not None:
+        stats = aggregate_stats([stats_first, stats_second])
+    else:
+        stats = stats_first or stats_second
+    if stats is not None:
+        write_stats(stats, out_dir)
 
     # Episodes stats: copy and rename where available
     for new_idx, epd in enumerate(new_episodes):
