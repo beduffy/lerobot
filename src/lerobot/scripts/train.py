@@ -67,6 +67,40 @@ from huggingface_hub import HfApi
 
 
 
+def _ensure_minimal_stats(ds_meta) -> None:
+    """Ensure required stats entries exist for non-visual features used by normalization.
+
+    Fills missing entries with zero-mean and unit-std tensors of the right shape.
+    """
+    try:
+        features = getattr(ds_meta, "features", {})
+        stats = getattr(ds_meta, "stats", {})
+        for key, ft in features.items():
+            if ft.get("dtype") in ["image", "video"]:
+                # Visual stats handled elsewhere (ImageNet injection or dataset-provided)
+                continue
+            # Keys commonly required by policies: 'observation.state', 'action'
+            if key not in stats:
+                stats[key] = {}
+            shape = ft.get("shape") or ()
+            # Normalize shapes to 1D list length when applicable
+            if isinstance(shape, (list, tuple)) and len(shape) == 1:
+                dim = int(shape[0])
+                zeros = np.zeros((dim,), dtype=np.float32)
+                ones = np.ones((dim,), dtype=np.float32)
+            else:
+                zeros = np.zeros((1,), dtype=np.float32)
+                ones = np.ones((1,), dtype=np.float32)
+            for k in ("mean", "std", "min", "max"):
+                if k not in stats[key]:
+                    stats[key][k] = zeros if k in ("mean", "min",) else ones
+            if "count" not in stats[key]:
+                stats[key]["count"] = np.array([1], dtype=np.int64)
+        ds_meta.stats = stats
+    except Exception:
+        # Do not fail hard; normalization code will raise if truly required
+        pass
+
 def update_policy(
     train_metrics: MetricsTracker,
     policy: PreTrainedPolicy,
@@ -364,6 +398,7 @@ def train(cfg: TrainPipelineConfig):
 
     logging.info("Creating dataset")
     dataset = make_dataset(cfg)
+    _ensure_minimal_stats(dataset.meta)
     val_dataset = None
     if getattr(cfg.dataset, "val_episodes", None) or getattr(cfg.dataset, "val_repo_id", None):
         # Make a shallow copy of cfg to reuse dataset factory for val episodes
@@ -548,8 +583,10 @@ def train(cfg: TrainPipelineConfig):
                 try:
                     t_tr0 = time.perf_counter()
                     train_mae_png = cfg.output_dir / "train_plots" / f"mae_train_ep0_step_{get_step_identifier(step, cfg.steps)}.png"
+                    # Select episode index for TRAIN MAE via env (default 0)
+                    train_mae_ep_idx = int(os.environ.get("LEROBOT_TRAIN_MAE_EP_IDX", "0"))
                     train_overall_mae, _, _, _ = _evaluate_mae_on_episode(
-                        policy, dataset, episode_idx=0, device=device, out_path=train_mae_png
+                        policy, dataset, episode_idx=train_mae_ep_idx, device=device, out_path=train_mae_png
                     )
                     logging.info(colored("Train MAE ep0:", "yellow", attrs=["bold"]) + f" mae={train_overall_mae:.6f}")
                     if wandb_logger:
@@ -573,8 +610,10 @@ def train(cfg: TrainPipelineConfig):
                     try:
                         t1 = time.perf_counter()
                         mae_png = cfg.output_dir / "val_plots" / f"mae_ep0_step_{get_step_identifier(step, cfg.steps)}.png"
+                        # Select episode index for VAL MAE via env (default 0)
+                        val_mae_ep_idx = int(os.environ.get("LEROBOT_VAL_MAE_EP_IDX", "0"))
                         overall_mae, per_joint_mae, preds_np, gt_np = _evaluate_mae_on_episode(
-                            policy, val_dataset, episode_idx=0, device=device, out_path=mae_png
+                            policy, val_dataset, episode_idx=val_mae_ep_idx, device=device, out_path=mae_png
                         )
                         logging.info(colored("Val MAE ep0:", "yellow", attrs=["bold"]) + f" mae={overall_mae:.6f}")
                         if wandb_logger:
