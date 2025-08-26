@@ -9,21 +9,28 @@ for kv in "$@"; do
 done 
 
 # ---- YOU EDIT (env vars override these) ----
+# what needs to change per run
+# Use by 174 episodes
+# dataset.num_frames=249369 (249K)
 # TASK="${TASK:-pick_place_one_white_sock_black_out_blinds}"
 TASK="${TASK:-d1_d2_d4_dataset_only_3_validation_episodes}"
 RUN_TAG="${RUN_TAG:-checkpoint_50k_500k_steps}"
-BATCH="${BATCH:-8}"
-STEPS="${STEPS:-500000}"
-# Resume controls (env overridable)
+DATASET_REPO_ID="${DATASET_REPO_ID:-bearlover365/d1_d2_d4_white_socks_train}"
+# Optional offline validation repo (held-out set)
+VAL_REPO_ID="${VAL_REPO_ID:-bearlover365/d1_d2_d4_validation_dataset_3_episodes}"
+POLICY_REPO_ID="${POLICY_REPO_ID:-bearlover365/d1_d2_d4_dataset_3_validation_episodes}"
+
+# ------ Resume controls (env overridable)
 RESUME="${RESUME:-false}"
 # CHECKPOINT_DIR="${CHECKPOINT_DIR:-/teamspace/studios/this_studio/lerobot/outputs/train/d4_dataset_only_2_validation_episodes/checkpoints/050000}"
 # TODO had to do two pretrained_model
 # CHECKPOINT_DIR="${CHECKPOINT_DIR:-/teamspace/studios/this_studio/lerobot/outputs/train/d4_dataset_only_2_validation_episodes/checkpoints/050000/pretrained_model}"
-# Use by 174 episodes
-# dataset.num_frames=249369 (249K)
-DATASET_REPO_ID="${DATASET_REPO_ID:-bearlover365/d1_d2_d4_white_socks_train}"
-# Optional offline validation repo (held-out set)
-VAL_REPO_ID="${VAL_REPO_ID:-bearlover365/d1_d2_d4_validation_dataset_3_episodes}"
+# export WANDB_RUN_ID="${WANDB_RUN_ID:-ms2tqgeo}"
+
+# MORE FIXED -----
+BATCH="${BATCH:-8}"
+STEPS="${STEPS:-500000}"
+
 LOG_FREQ="${LOG_FREQ:-200}"
 POLICY_DEVICE="${POLICY_DEVICE:-cuda}"
 SAVE_CHECKPOINT="${SAVE_CHECKPOINT:-true}"
@@ -31,11 +38,9 @@ SAVE_FREQ="${SAVE_FREQ:-50000}"
 EVAL_FREQ="${EVAL_FREQ:-5000}"
 # Hub push parameters (optional)
 PUSH_TO_HUB="${PUSH_TO_HUB:-true}"
-POLICY_REPO_ID="${POLICY_REPO_ID:-bearlover365/d4_dataset_only_2_validation_episodes}"
 # W&B defaults (enabled by default like other scripts)
 WB_PROJECT="${WB_PROJECT:-lerobot}"
 WB_ENTITY="${WB_ENTITY:-benfduffy-bearcover-gmbh}"
-# export WANDB_RUN_ID="${WANDB_RUN_ID:-ms2tqgeo}"
 REPO="/teamspace/studios/this_studio/lerobot"
 SCRIPT="$REPO/src/lerobot/scripts/train.py"
 PYTHONPATH="${PYTHONPATH:-$REPO/src}"
