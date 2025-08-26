@@ -788,6 +788,7 @@ updt_s:0.265 with training above on T4
 14000 x 0.265 = 3710 seconds = 1.03 hours = 1 hour 4 minutes
 60000 x 0.265 = 15900 seconds = 4.42 hours = 4 hours 25 minutes
 150000 x 0.265 = 39750 seconds = 11.04 hours = 11 hours 3 minutes
+500000 x 0.265 = 132500 seconds = 36.8 hours = 36 hours 48 minutes
 
 Above I mentioned on previous run
 ag10 0.092 x 200 = 18.4s per 200 steps
@@ -800,6 +801,9 @@ updt_s:0.051
 14000 x 0.051 = 714 seconds = 0.2 hours = 12 minutes
 60000 x 0.051 = 3060 seconds = 0.85 hours = 51 minutes
 150000 x 0.051 = 7650 seconds = 2.12 hours = 2 hours 7 minutes
+500000 x 0.051 = 25500 seconds = 7.08 hours = 7 hours 5 minutes
+
+7 hours x 2.89 credits = 20.23 credits
 
 # imaginary l40s 3x faster with 224 resolution
 0.051 / 3 = 0.017

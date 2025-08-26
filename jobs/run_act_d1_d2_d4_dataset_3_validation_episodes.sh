@@ -18,7 +18,7 @@ STEPS="${STEPS:-500000}"
 RESUME="${RESUME:-false}"
 # CHECKPOINT_DIR="${CHECKPOINT_DIR:-/teamspace/studios/this_studio/lerobot/outputs/train/d4_dataset_only_2_validation_episodes/checkpoints/050000}"
 # TODO had to do two pretrained_model
-CHECKPOINT_DIR="${CHECKPOINT_DIR:-/teamspace/studios/this_studio/lerobot/outputs/train/d4_dataset_only_2_validation_episodes/checkpoints/050000/pretrained_model}"
+# CHECKPOINT_DIR="${CHECKPOINT_DIR:-/teamspace/studios/this_studio/lerobot/outputs/train/d4_dataset_only_2_validation_episodes/checkpoints/050000/pretrained_model}"
 # Use by 74 episodes instead of 76 episodes
 DATASET_REPO_ID="${DATASET_REPO_ID:-bearlover365/pick_place_up_to_four_white_socks_varying_daylight_intensity_train}"
 # Optional offline validation repo (held-out set)
@@ -34,7 +34,7 @@ POLICY_REPO_ID="${POLICY_REPO_ID:-bearlover365/d4_dataset_only_2_validation_epis
 # W&B defaults (enabled by default like other scripts)
 WB_PROJECT="${WB_PROJECT:-lerobot}"
 WB_ENTITY="${WB_ENTITY:-benfduffy-bearcover-gmbh}"
-export WANDB_RUN_ID="${WANDB_RUN_ID:-ms2tqgeo}"
+# export WANDB_RUN_ID="${WANDB_RUN_ID:-ms2tqgeo}"
 REPO="/teamspace/studios/this_studio/lerobot"
 SCRIPT="$REPO/src/lerobot/scripts/train.py"
 PYTHONPATH="${PYTHONPATH:-$REPO/src}"
@@ -156,11 +156,13 @@ if [ "$RESUME" = "true" ]; then
     --eval_freq=$EVAL_FREQ \
     --save_freq="$SAVE_FREQ" \
     --steps="$STEPS" \
-    --dataset.val_episodes='[0,1]' \
+    --dataset.val_episodes='[0,1,2]' \
     --policy.device="$POLICY_DEVICE" \
     "${EXTRA_ARGS[@]}" \
     |& tee -a "$(dirname "$RUN_DIR")/${TASK}_${RUN_TAG}.log"
+
 else
+
   PYTHONUNBUFFERED=1 PYTHONPATH="$PYTHONPATH" python "$SCRIPT" \
     --resume=false \
     --output_dir="$RUN_DIR" \
@@ -169,7 +171,7 @@ else
     --wandb.project="$WB_PROJECT" \
     --wandb.entity="$WB_ENTITY" \
     --dataset.repo_id="$DATASET_REPO_ID" \
-    --dataset.val_episodes='[0,1]' \
+    --dataset.val_episodes='[0,1,2]' \
     --policy.type=act \
     --policy.push_to_hub="$PUSH_TO_HUB" \
     --policy.device="$POLICY_DEVICE" \
