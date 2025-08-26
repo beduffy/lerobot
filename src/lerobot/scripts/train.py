@@ -184,7 +184,10 @@ def _compute_offline_val_loss(policy: PreTrainedPolicy, dataset, device: torch.d
                 if gt is None:
                     processed_batches += 1
                     continue
-                if gt.ndim == 2:  # (B, A) -> (B, 1, A)
+                # Align target to first-step action shape when sequences are provided
+                if gt.ndim == 3:  # (B, S, A) -> (B, 1, A)
+                    gt = gt[:, :1, :]
+                elif gt.ndim == 2:  # (B, A) -> (B, 1, A)
                     gt = gt.unsqueeze(1)
                 l1 = F.l1_loss(pred, gt, reduction="mean")
                 losses.append(l1.item())
