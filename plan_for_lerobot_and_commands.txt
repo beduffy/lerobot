@@ -745,8 +745,8 @@ python -m lerobot.record \
   --robot.port=/dev/ttyACM0 \
   --robot.id=my_awesome_follower_arm \
   --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
-  --policy.path=${HF_USER}/${task_name}_${model_step_number} \
-  --dataset.repo_id=${HF_USER}/eval_${task_name} \
+  --policy.path=bearlover365/${task_name}_${model_step_number} \
+  --dataset.repo_id=bearlover365/eval_${task_name} \
   --dataset.root="$EVAL_ROOT" \
   --dataset.single_task="Grab all socks and place into your box" \
   --dataset.num_episodes=1 \
@@ -754,10 +754,17 @@ python -m lerobot.record \
   --resume=false \
   --display_data=true
 
-py310
 export EVAL_ROOT="$HOME/.cache/lerobot_local/eval_${task_name}"
-full_model_path="bearlover365/d2_original_good_act_1_act_model_130000"
+# trying to avoid a new variable and make it easy
+
+py310
 task_name="d2_original_good_act_1_act_model"
+task_name="d1_d2_merged_normal_resolution_300000"
+
+
+task_name="d4_dataset_only_2_validation_episodes"
+full_model_path="bearlover365/${task_name}_200000"
+full_model_path="bearlover365/${task_name}"
 python -m lerobot.record \
   --robot.type=so101_follower \
   --robot.port=/dev/ttyACM0 \
@@ -765,7 +772,7 @@ python -m lerobot.record \
   --robot.cameras="{ wrist: {type: opencv, index_or_path: 4, width: 640, height: 480, fps: 30}}" \
   --policy.path=${full_model_path} \
   --dataset.repo_id=bearlover365/eval_${task_name} \
-  --dataset.root="$EVAL_ROOT" \
+  --dataset.root="$HOME/.cache/lerobot_local/eval_${task_name}" \
   --dataset.single_task="Grab all socks and place into your box" \
   --dataset.num_episodes=1 \
   --dataset.push_to_hub=false \
