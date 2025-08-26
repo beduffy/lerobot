@@ -154,7 +154,8 @@ def update_policy(
 
 
 def _compute_offline_val_loss(policy: PreTrainedPolicy, dataset, device: torch.device, batch_size: int, num_workers: int) -> float:
-    """Compute average loss on a held-out dataset (no grad)."""
+    """Compute average loss on a held-out dataset (no grad). L1 loss so not really comparable to training loss."""
+    # TODO understand better
     policy.eval()
     dataloader = torch.utils.data.DataLoader(
         dataset,
@@ -242,6 +243,7 @@ def _evaluate_mae_on_episode(
 
     Returns overall_mae and per_joint_mae (or None if plot disabled).
     """
+    # TODO understand better inputs and outputs
 
     # Build index range for the episode (subsample for speed on CPU), handling multi-dataset
     source_dataset = dataset
@@ -362,7 +364,7 @@ def _evaluate_mae_on_episode(
             if j == 0:
                 ax.legend(loc="best")
         axes[-1].set_xlabel("Time Step")
-        fig.suptitle(f"Pred vs GT (Episode 0)  Overall MAE={overall_mae:.4f}")
+        fig.suptitle(f"Pred vs GT (Episode {episode_idx})  Overall MAE={overall_mae:.4f}")
         fig.tight_layout(rect=(0, 0, 1, 0.97))
         fig.savefig(out_path, dpi=160)
         plt.close(fig)
