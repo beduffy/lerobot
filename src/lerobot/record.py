@@ -124,8 +124,10 @@ class DatasetRecordConfig:
     # Limit the frames per second.
     fps: int = 30
     # Number of seconds for data recording for each episode.
-    episode_time_s: int | float = 60
-    # Number of seconds for resettingthe environment after each episode.
+    # episode_time_s: int | float = 60
+    # episode_time_s: int | float = 120
+    episode_time_s: int | float = 300
+    # Number of seconds for resetting the environment after each episode.
     reset_time_s: int | float = 7
     # Number of episodes to record.
     num_episodes: int = 50
@@ -206,6 +208,12 @@ def record_loop(
     if dataset is not None and dataset.fps != fps:
         raise ValueError(f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps}).")
 
+    # ACT/Policy inference profiling variables
+    policy_forward_time_total_s = 0.0
+    policy_forward_time_min_s = float("inf")
+    policy_forward_time_max_s = 0.0
+    policy_forward_num_calls = 0
+
     teleop_arm = teleop_keyboard = None
     if isinstance(teleop, list):
         teleop_keyboard = next((t for t in teleop if isinstance(t, KeyboardTeleop)), None)
@@ -242,6 +250,7 @@ def record_loop(
             observation_frame = build_dataset_frame(dataset.features, observation, prefix="observation")
 
         if policy is not None:
+            _t0 = time.perf_counter()
             action_values = predict_action(
                 observation_frame,
                 policy,
@@ -250,6 +259,11 @@ def record_loop(
                 task=single_task,
                 robot_type=robot.robot_type,
             )
+            _dt = time.perf_counter() - _t0
+            policy_forward_time_total_s += _dt
+            policy_forward_time_min_s = min(policy_forward_time_min_s, _dt)
+            policy_forward_time_max_s = max(policy_forward_time_max_s, _dt)
+            policy_forward_num_calls += 1
             action = {key: action_values[i].item() for i, key in enumerate(robot.action_features)}
         elif policy is None and isinstance(teleop, Teleoperator):
             action = teleop.get_action()
@@ -286,6 +300,21 @@ def record_loop(
         busy_wait(1 / fps - dt_s)
 
         timestamp = time.perf_counter() - start_episode_t
+
+    # Log ACT/Policy inference profiling summary per episode (only during recording phase)
+    if policy is not None and dataset is not None and policy_forward_num_calls > 0:
+        avg_ms = (policy_forward_time_total_s / policy_forward_num_calls) * 1000.0
+        min_ms = policy_forward_time_min_s * 1000.0 if policy_forward_time_min_s != float("inf") else 0.0
+        max_ms = policy_forward_time_max_s * 1000.0
+        compute_fps = 1000.0 / avg_ms if avg_ms > 0 else float("inf")
+        logging.info(
+            "ACT inference profiling — calls: %d, avg: %.2f ms, min: %.2f ms, max: %.2f ms, compute FPS: %.1f",
+            policy_forward_num_calls,
+            avg_ms,
+            min_ms,
+            max_ms,
+            compute_fps,
+        )
 
 
 @parser.wrap()
