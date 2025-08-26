@@ -935,6 +935,7 @@ print("Stopping Studio")
 s.stop()
 
 
+# TODO run act visualiser on all my models and datasets
 # Todo ONE DAY LEARN DATA CONNECTIONS S3 IN LIGHTNING. to save space. and make jobs start faster?
 
 ##### actual batch job for resume needs to be #############

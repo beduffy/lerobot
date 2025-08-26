@@ -10,8 +10,8 @@ done
 
 # ---- YOU EDIT (env vars override these) ----
 # TASK="${TASK:-pick_place_one_white_sock_black_out_blinds}"
-TASK="${TASK:-d4_dataset_only_2_validation_episodes}"
-RUN_TAG="${RUN_TAG:-checkpoint_25k_300k_steps}"
+TASK="${TASK:-d1_d2_d4_dataset_only_3_validation_episodes}"
+RUN_TAG="${RUN_TAG:-checkpoint_50k_500k_steps}"
 BATCH="${BATCH:-8}"
 STEPS="${STEPS:-500000}"
 # Resume controls (env overridable)
@@ -19,10 +19,11 @@ RESUME="${RESUME:-false}"
 # CHECKPOINT_DIR="${CHECKPOINT_DIR:-/teamspace/studios/this_studio/lerobot/outputs/train/d4_dataset_only_2_validation_episodes/checkpoints/050000}"
 # TODO had to do two pretrained_model
 # CHECKPOINT_DIR="${CHECKPOINT_DIR:-/teamspace/studios/this_studio/lerobot/outputs/train/d4_dataset_only_2_validation_episodes/checkpoints/050000/pretrained_model}"
-# Use by 74 episodes instead of 76 episodes
-DATASET_REPO_ID="${DATASET_REPO_ID:-bearlover365/pick_place_up_to_four_white_socks_varying_daylight_intensity_train}"
+# Use by 174 episodes
+# dataset.num_frames=249369 (249K)
+DATASET_REPO_ID="${DATASET_REPO_ID:-bearlover365/d1_d2_d4_white_socks_train}"
 # Optional offline validation repo (held-out set)
-VAL_REPO_ID="${VAL_REPO_ID:-bearlover365/pick_place_up_to_four_white_socks_varying_daylight_intensity_validation_episode_0_and_72}"
+VAL_REPO_ID="${VAL_REPO_ID:-bearlover365/d1_d2_d4_validation_dataset_3_episodes}"
 LOG_FREQ="${LOG_FREQ:-200}"
 POLICY_DEVICE="${POLICY_DEVICE:-cuda}"
 SAVE_CHECKPOINT="${SAVE_CHECKPOINT:-true}"
@@ -85,8 +86,8 @@ echo "REPO=$REPO"
 echo "SCRIPT=$SCRIPT"
 echo "RUN_DIR=$RUN_DIR"
 echo "RESUME=$RESUME"
-echo "CHECKPOINT_DIR=$CHECKPOINT_DIR"
-echo "WANDB_RUN_ID=${WANDB_RUN_ID}"
+# echo "CHECKPOINT_DIR=$CHECKPOINT_DIR"
+# echo "WANDB_RUN_ID=${WANDB_RUN_ID}"
 
 echo "LEROBOT_VAL_MAX_BATCHES=$LEROBOT_VAL_MAX_BATCHES"
 echo "LEROBOT_VAL_MAX_FRAMES=$LEROBOT_VAL_MAX_FRAMES"
