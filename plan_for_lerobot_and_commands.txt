@@ -582,6 +582,7 @@ python lerobot/scripts/visualize_dataset_html.py \
 # run in both laptop and in cloud
 task_name="pick_place_one_white_sock_black_out_blinds"
 task_name="pick_place_up_to_four_white_socks_black_out_blinds"
+task_name="pick_place_up_to_four_white_socks_varying_daylight_intensity"
 
 
 huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
@@ -613,7 +614,7 @@ python -m lerobot.record \
     --teleop.id=my_awesome_leader_arm \
     --display_data=true \
     --dataset.repo_id=${HF_USER}/${task_name} \
-    --dataset.num_episodes=70 \
+    --dataset.num_episodes=51 \
     --dataset.single_task="Grab all socks and place into your box"
 
 # resuming
@@ -628,7 +629,7 @@ python -m lerobot.record \
     --display_data=true \
     --resume=true \
     --dataset.repo_id=${HF_USER}/${task_name} \
-    --dataset.num_episodes=50 \
+    --dataset.num_episodes=70 \
     --dataset.single_task="Grab white sock and place into your box"
 
 python lerobot/scripts/visualize_dataset_html.py \
@@ -787,6 +788,7 @@ updt_s:0.265 with training above on T4
 14000 x 0.265 = 3710 seconds = 1.03 hours = 1 hour 4 minutes
 60000 x 0.265 = 15900 seconds = 4.42 hours = 4 hours 25 minutes
 150000 x 0.265 = 39750 seconds = 11.04 hours = 11 hours 3 minutes
+500000 x 0.265 = 132500 seconds = 36.8 hours = 36 hours 48 minutes
 
 Above I mentioned on previous run
 ag10 0.092 x 200 = 18.4s per 200 steps
@@ -799,6 +801,9 @@ updt_s:0.051
 14000 x 0.051 = 714 seconds = 0.2 hours = 12 minutes
 60000 x 0.051 = 3060 seconds = 0.85 hours = 51 minutes
 150000 x 0.051 = 7650 seconds = 2.12 hours = 2 hours 7 minutes
+500000 x 0.051 = 25500 seconds = 7.08 hours = 7 hours 5 minutes
+
+7 hours x 2.89 credits = 20.23 credits
 
 # imaginary l40s 3x faster with 224 resolution
 0.051 / 3 = 0.017
@@ -930,6 +935,7 @@ print("Stopping Studio")
 s.stop()
 
 
+# TODO run act visualiser on all my models and datasets
 # Todo ONE DAY LEARN DATA CONNECTIONS S3 IN LIGHTNING. to save space. and make jobs start faster?
 
 ##### actual batch job for resume needs to be #############
@@ -1126,19 +1132,45 @@ pip install -e .
 ###### dataset plan
 ########################
 
+TODO
+- have more non sock objects around that it shouldn't lift e.g. my slippers or? 
+- Is create3 in office? bring it home. Will it be easy to drive and attach scissor lift to? will it be too unstable? Should bring it anyway even for D7 and D8... 
+
+gpt5 ablation:
+- Eval you can trust (so ablations mean something)
+- Make a tiny, repeatable eval suite (20 trials per cell is great):
+- Color generalization: train white; test gray/black.
+- Lighting: train blackout; test daylight (3 intensities).
+- Camera height: test the D3 heights not in train.
+- Pose shifts: test 4–6 robot/table poses unseen in train.
+- Backgrounds: test in the new room(s).
+- Moving base: if applicable, test mild base motion.
+
+Metrics: success rate, time‑to‑first grasp, number of re‑grips, and “abort” count. Log per‑cell so you can see exactly which factor hurts.
+Ablations to actually run:
+
+D1 only vs D1+D2 vs D1–D4 (white→lighting).
++D5/D6 (add color).
++D7 (pose randomization).
+Hold out entire factors in training to answer your questions (“never saw gray”, “never saw daytime”, “never moved platform”).
+
+
+
 Datasets (10-200 demos each?): 
 DONE.
 D1. 51 demos (0-50) of Fixed robot facing white wall, blackout blinds, overhead light, only 1 white sock in many positions. Mostly looking at rerun rather than the robot to make it harder and more interesting. 
 bearlover365/pick_place_one_white_sock_black_out_blinds
-D2. 51 demos of Fixed robot facing white wall, blackout blinds, overhead light, 1-4 slightly different white socks in many positions. More details: recording, actually did lots of fails and retries and couldn't reach to the right. And tried looking around and picking up multiple socks too. took 75 minutes probably. 51 demos. num_frames=83031 
+D2. 51 demos of Fixed robot facing white wall, blackout blinds, overhead light, 1-4 slightly different white socks in many positions. More details: recording, actually did lots of fails and retries and couldn't reach to the right. I worry too many retries. And tried looking around and picking up multiple socks too. took 75 minutes probably. 51 demos. num_frames=83031 
 bearlover365/pick_place_up_to_four_white_socks_black_out_blinds
+D4. (daylight, no overheads, white socks): Vary daylight intensity (blinds high/half/low) across episodes. 40–60 eps. Fix issue with socks on right! TODO.  Aim ~150–200 successful picks in total. same as above but no flashy lights or overhead light, this time daylight with blackout blinds up. Also try different amounts of daylight for different episodes. actually did much more variation, even funky lighting and moving lamp everywhere, door open closed, many different blind configurations, very dark, oh my, even blinds down, crazy lamp etc
+bearlover365/pick_place_up_to_four_white_socks_varying_daylight_intensity
+two validation episodes were 0 and 72, one daylight and 2nd pretty dark. 
 
 To be recorded:
-D3. same as above but using my funky lamp which is changing colours a lot (not really a realistic scenario of normal but trains the model to focus on the correct thing?) 
-D4. same as above but no flashy lights or overhead light, this time daylight with blackout blinds up. Also try different amounts of daylight for different episodes. 
+D3. (scissor heights): 3–4 distinct wrist heights × ~12 eps each ⇒ 36–48 eps. Make sure each height has ~20 successful picks.
 D5. blackout blinds down, but many different socks, big ones small ones, many different colours and up to 10 of them. 
 D6. Same as above but daylight. 
-D7. Then start moving the platform to many different places in my room, with sometimes daylight and sometimes blackout blinds (or two different datasets for this?). MANY DIFFERENT POSITIONS, needs way more data, maybe 500 episodes? 
+D7. Then start moving the platform to many different places in my room, with sometimes daylight and sometimes blackout blinds (or two different datasets for this?). MANY DIFFERENT POSITIONS, needs way more data, maybe 500 episodes?  TODO. 
 D8. Then start moving to entire apartment. Hopefully with enough training of the above, the model has learned to not really care about the background/environment and more learned what socks look like and what it looks like to have a succesful grasp. No? How much will background screw me? I want to find a way to quantify this and find tricks to need less data. Maybe I can do 1 room at a time and see how 1 extra room helps.
 
 

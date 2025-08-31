@@ -135,7 +135,7 @@ def assemble_split(ds, split_eps, out_dir: Path, out_repo, dry_run: bool = False
     # push to hub
     if not dry_run:
         api = HfApi()
-        api.create_repo(repo_id=out_repo, private=True, repo_type="dataset", exist_ok=True)
+        api.create_repo(repo_id=out_repo, private=False, repo_type="dataset", exist_ok=True)
         api.upload_folder(repo_id=out_repo, folder_path=str(out_dir), repo_type="dataset",
                           allow_patterns=["**"], ignore_patterns=["*.tmp","*.log"])
 
