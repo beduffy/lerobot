@@ -27,6 +27,7 @@ DIFF_N_OBS_STEPS="${DIFF_N_OBS_STEPS:-2}"
 DIFF_HORIZON="${DIFF_HORIZON:-16}"   # Must be multiple of 2**len(down_dims) (default 8)
 DIFF_N_ACTION_STEPS="${DIFF_N_ACTION_STEPS:-8}"  # Must satisfy n_action_steps <= horizon - n_obs_steps + 1
 DIFF_USE_AMP="${DIFF_USE_AMP:-true}"
+DIFF_NUM_INFERENCE_STEPS="${DIFF_NUM_INFERENCE_STEPS:-25}"
 
 # Hub push parameters
 PUSH_TO_HUB="${PUSH_TO_HUB:-true}"
@@ -39,18 +40,18 @@ SCRIPT="$REPO/src/lerobot/scripts/train.py"
 PYTHONPATH="${PYTHONPATH:-$REPO/src}"
 
 # Validation evaluation limits (env overridable)
-export LEROBOT_VAL_MAX_BATCHES="${LEROBOT_VAL_MAX_BATCHES:-8}"
-export LEROBOT_VAL_MAX_FRAMES="${LEROBOT_VAL_MAX_FRAMES:-1024}"
+export LEROBOT_VAL_MAX_BATCHES="${LEROBOT_VAL_MAX_BATCHES:-2}"
+export LEROBOT_VAL_MAX_FRAMES="${LEROBOT_VAL_MAX_FRAMES:-128}"
 # MAE validation speed knobs (env overridable)
-export LEROBOT_VAL_MAE_MAX_FRAMES="${LEROBOT_VAL_MAE_MAX_FRAMES:-800}"
-export LEROBOT_VAL_MAE_BATCH_SIZE="${LEROBOT_VAL_MAE_BATCH_SIZE:-64}"
+export LEROBOT_VAL_MAE_MAX_FRAMES="${LEROBOT_VAL_MAE_MAX_FRAMES:-80}"
+export LEROBOT_VAL_MAE_BATCH_SIZE="${LEROBOT_VAL_MAE_BATCH_SIZE:-32}"
 # MAE eval episode indices (train/val)
 export LEROBOT_TRAIN_MAE_EP_IDX="${LEROBOT_TRAIN_MAE_EP_IDX:-0}"
 export LEROBOT_VAL_MAE_EP_IDX="${LEROBOT_VAL_MAE_EP_IDX:-1}"
 
 # ---- Phases (Smoke, then Full) ----
 # Toggle each phase via env vars
-RUN_SMOKE="${RUN_SMOKE:-true}"
+RUN_SMOKE="${RUN_SMOKE:-false}"
 RUN_FULL="${RUN_FULL:-true}"
 
 # Smoke test params: tiny run to catch shape/config issues fast
@@ -64,7 +65,7 @@ SMOKE_SAVE_CHECKPOINT="${SMOKE_SAVE_CHECKPOINT:-false}"
 FULL_BATCH="${FULL_BATCH:-8}"
 FULL_STEPS="${FULL_STEPS:-300000}"
 FULL_LOG_FREQ="${FULL_LOG_FREQ:-200}"
-FULL_EVAL_FREQ="${FULL_EVAL_FREQ:-5000}"
+FULL_EVAL_FREQ="${FULL_EVAL_FREQ:-500}"
 FULL_SAVE_CHECKPOINT="${FULL_SAVE_CHECKPOINT:-true}"
 FULL_SAVE_FREQ="${FULL_SAVE_FREQ:-50000}"
 
@@ -107,6 +108,7 @@ COMMON_ARGS=(
   --policy.n_obs_steps="$DIFF_N_OBS_STEPS"
   --policy.horizon="$DIFF_HORIZON"
   --policy.n_action_steps="$DIFF_N_ACTION_STEPS"
+  --policy.num_inference_steps="$DIFF_NUM_INFERENCE_STEPS"
 )
 
 # 1) Smoke test phase
