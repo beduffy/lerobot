@@ -278,6 +278,9 @@ def _evaluate_mae_on_episode(
     policy.eval()
     mae_bs_env = int(os.environ.get("LEROBOT_VAL_MAE_BATCH_SIZE", "0"))
     mae_bs = mae_bs_env if mae_bs_env > 0 else (64 if device.type == "cuda" else 1)
+    # Diffusion requires sequential evaluation to warm up internal queues
+    if getattr(policy, "name", None) == "diffusion":
+        mae_bs = 1
 
     if mae_bs > 1:
         subset = torch.utils.data.Subset(source_dataset, indices)
@@ -297,7 +300,11 @@ def _evaluate_mae_on_episode(
                         inp[key] = val.to(device, non_blocking=device.type == "cuda")
                 if not inp:
                     continue
-                if hasattr(policy, "predict_action_chunk"):
+                # For diffusion, always use select_action to leverage internal queues
+                if getattr(policy, "name", None) == "diffusion":
+                    out = policy.select_action(inp)
+                    pred = out[:, 0, :] if out.ndim == 3 else out
+                elif hasattr(policy, "predict_action_chunk"):
                     chunk = policy.predict_action_chunk(inp)
                     pred = chunk[:, 0, :]
                 else:
@@ -311,16 +318,45 @@ def _evaluate_mae_on_episode(
                     preds.append(pred.detach().cpu())
                     gts.append(gt.detach().cpu())
     else:
+        # Reset policy state for new episode to clear queues
+        if hasattr(policy, "reset"):
+            try:
+                policy.reset()
+            except Exception:
+                pass
         with torch.no_grad():
             for idx in indices:
                 sample = get_sample(idx)
                 inp = {}
                 for key, val in sample.items():
                     if key.startswith("observation.") and isinstance(val, torch.Tensor):
-                        inp[key] = val.unsqueeze(0).to(device)
+                        t = val
+                        # For diffusion/select_action we need a single observation step (latest)
+                        try:
+                            if "image" in key:
+                                # Handle shapes: (S,C,H,W) or (B,S,C,H,W) -> select last S
+                                if t.ndim == 5:  # (B,S,C,H,W)
+                                    t = t[:, -1]
+                                elif t.ndim == 4:  # (S,C,H,W)
+                                    t = t[-1]
+                            else:
+                                # Handle state/env_state shapes: (S,D) or (B,S,D) -> select last S
+                                if t.ndim == 3:  # (B,S,D)
+                                    t = t[:, -1]
+                                elif t.ndim == 2:  # (S,D)
+                                    t = t[-1]
+                        except Exception:
+                            pass
+                        # Ensure batch dimension exists
+                        if t.ndim in (1, 3):
+                            t = t.unsqueeze(0)
+                        inp[key] = t.to(device)
                 if not inp:
                     continue
-                if hasattr(policy, "predict_action_chunk"):
+                # For diffusion, always use select_action to ensure queues are handled
+                if getattr(policy, "name", None) == "diffusion":
+                    pred = policy.select_action(inp)
+                elif hasattr(policy, "predict_action_chunk"):
                     pred_chunk = policy.predict_action_chunk(inp)
                     pred = pred_chunk[:, 0, :]
                 else:
