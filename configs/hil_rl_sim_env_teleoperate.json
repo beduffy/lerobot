@@ -1,0 +1,9 @@
+{
+    "name": "franka_sim",
+    "mode": "record",
+    "repo_id": "lerobot/gym_hil_teleop_practice",
+    "dataset_root": "datasets/practice",
+    "task": "PandaPickCubeKeyboard-v0",
+    "num_episodes": 30,
+    "episode": 0
+}
